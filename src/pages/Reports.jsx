@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 
 const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(n) + " so'm"
 const hide = (val, locked) => locked ? '••••••' : val
@@ -28,8 +29,9 @@ export default function Reports({ isBoss }) {
     setLoading(false)
   }
 
-  const unlock = () => {
-    if (pass === 'boss123' || pass.length >= 3) { setLocked(false); setPass('') }
+  const unlock = async () => {
+    const { data } = await supabase.from('settings').select('value').eq('key','view_password').single()
+    if (data?.value === pass) { setLocked(false); setPass('') }
     else alert("Parol noto'g'ri!")
   }
 

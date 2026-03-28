@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 
 const Card = ({ label, value, sub, color }) => (
   <div style={{background:'#fff',borderRadius:12,padding:20,border:'1px solid #E5E7EB',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
@@ -39,8 +40,9 @@ export default function DashboardHome({ isBoss }) {
     setLoading(false)
   }
 
-  const unlock = () => {
-    if (pass === 'boss123' || pass.length >= 3) setLocked(false)
+  const unlock = async () => {
+    const { data } = await supabase.from('settings').select('value').eq('key','view_password').single()
+    if (data?.value === pass) setLocked(false)
     else alert("Parol noto'g'ri!")
   }
 
