@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { checkDeletePassword } from '../lib/checkPassword'
 
 export default function Teachers({ isBoss }) {
   const [teachers, setTeachers] = useState([])
@@ -27,18 +28,18 @@ export default function Teachers({ isBoss }) {
   const save = async () => {
     if (!form.full_name.trim()) return alert("Ism kiriting!")
     setSaving(true)
-    if (editItem) {
-      await supabase.from('teachers').update(form).eq('id', editItem.id)
-    } else {
-      await supabase.from('teachers').insert([form])
-    }
+    if (editItem) await supabase.from('teachers').update(form).eq('id', editItem.id)
+    else await supabase.from('teachers').insert([form])
     setShowModal(false)
     loadData()
     setSaving(false)
   }
 
   const deleteTeacher = async (id) => {
-    if (!window.confirm("O'qituvchini o'chirasizmi?")) return
+    const pass = window.prompt("O'chirish uchun maxsus parolni kiriting:")
+    if (!pass) return
+    const ok = await checkDeletePassword(pass)
+    if (!ok) return alert("Parol noto'g'ri!")
     await supabase.from('teachers').delete().eq('id', id)
     loadData()
   }
@@ -86,7 +87,7 @@ export default function Teachers({ isBoss }) {
                 </div>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:700,fontSize:15}}>{t.full_name}</div>
-                  <div style={{fontSize:12,color:'#9CA3AF'}}>{t.phone||'Telefon yo\'q'}</div>
+                  <div style={{fontSize:12,color:'#9CA3AF'}}>{t.phone||"Telefon yo'q"}</div>
                 </div>
                 {isBoss && (
                   <div style={{display:'flex',gap:6}}>

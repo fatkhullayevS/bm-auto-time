@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { checkDeletePassword } from '../lib/checkPassword'
 
 const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(n) + " so'm"
 
@@ -56,8 +57,12 @@ export default function Students({ isBoss, onStudentClick }) {
     setSaving(false)
   }
 
-  const deleteStudent = async (id) => {
-    if (!window.confirm("O'quvchini o'chirasizmi?")) return
+  const deleteStudent = async (id, e) => {
+    e.stopPropagation()
+    const pass = window.prompt("O'chirish uchun maxsus parolni kiriting:")
+    if (!pass) return
+    const ok = await checkDeletePassword(pass)
+    if (!ok) return alert("Parol noto'g'ri!")
     await supabase.from('students').delete().eq('id', id)
     loadData()
   }
@@ -102,7 +107,7 @@ export default function Students({ isBoss, onStudentClick }) {
                 const debt = getDebt(st)
                 const price = st.course_price || 0
                 return (
-                  <tr key={st.id} style={{borderBottom:'1px solid #F9FAFB',cursor:'pointer'}} onClick={()=>onStudentClick&&onStudentClick(st.id)} onClick={()=>onStudentClick&&onStudentClick(st.id)} onMouseOver={e=>e.currentTarget.style.background='#FAFBFF'} onMouseOut={e=>e.currentTarget.style.background=''}>
+                  <tr key={st.id} style={{borderBottom:'1px solid #F9FAFB',cursor:'pointer'}} onClick={()=>onStudentClick&&onStudentClick(st.id)} onMouseOver={e=>e.currentTarget.style.background='#FAFBFF'} onMouseOut={e=>e.currentTarget.style.background=''}>
                     <td style={{padding:'12px 16px'}}>
                       <div style={{display:'flex',alignItems:'center',gap:8}}>
                         <div style={{width:30,height:30,borderRadius:8,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700,flexShrink:0}}>{st.full_name[0]}</div>
@@ -125,7 +130,7 @@ export default function Students({ isBoss, onStudentClick }) {
                         : <span style={{padding:'3px 8px',borderRadius:5,fontSize:11,fontWeight:600,background:'#F3F4F6',color:'#6B7280'}}>Guruhsiz</span>}
                     </td>
                     <td style={{padding:'12px 16px'}}>
-                      {isBoss && <button onClick={() => deleteStudent(st.id)} style={{background:'none',border:'none',color:'#EF4444',cursor:'pointer',fontSize:18,padding:4}}>×</button>}
+                      {isBoss && <button onClick={(e) => deleteStudent(st.id, e)} style={{background:'none',border:'none',color:'#EF4444',cursor:'pointer',fontSize:18,padding:4}}>×</button>}
                     </td>
                   </tr>
                 )
@@ -157,13 +162,7 @@ export default function Students({ isBoss, onStudentClick }) {
               </div>
               <div style={{gridColumn:'1/-1'}}>
                 <label style={labelStyle}>Kurs narxi (so'm) *</label>
-                <input
-                  type="number"
-                  value={form.course_price}
-                  onChange={e=>setForm({...form,course_price:e.target.value})}
-                  placeholder="1200000"
-                  style={inputStyle}
-                />
+                <input type="number" value={form.course_price} onChange={e=>setForm({...form,course_price:e.target.value})} placeholder="1200000" style={inputStyle}/>
               </div>
               <div style={{gridColumn:'1/-1'}}>
                 <label style={labelStyle}>Izoh</label>

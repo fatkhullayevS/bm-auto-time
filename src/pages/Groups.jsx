@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { checkDeletePassword } from '../lib/checkPassword'
 
 const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(n) + " so'm"
 
@@ -40,7 +41,10 @@ export default function Groups({ isBoss }) {
   }
 
   const deleteGroup = async (id) => {
-    if (!window.confirm("Guruhni o'chirasizmi?")) return
+    const pass = window.prompt("O'chirish uchun maxsus parolni kiriting:")
+    if (!pass) return
+    const ok = await checkDeletePassword(pass)
+    if (!ok) return alert("Parol noto'g'ri!")
     await supabase.from('groups').delete().eq('id', id)
     loadData()
   }
@@ -77,7 +81,7 @@ export default function Groups({ isBoss }) {
           return (
             <div key={g.id} style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:20,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
-                <div style={{width:42,height:42,borderRadius:10,background: g.status==='active'?'#DC2626':'#6B7280',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:16,flexShrink:0}}>
+                <div style={{width:42,height:42,borderRadius:10,background:g.status==='active'?'#DC2626':'#6B7280',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:16,flexShrink:0}}>
                   {g.name[0]}
                 </div>
                 <div style={{flex:1}}>
