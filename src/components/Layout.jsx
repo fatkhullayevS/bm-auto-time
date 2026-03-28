@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
-export default function Layout({ session, children, currentPage, setCurrentPage }) {
+export default function Layout({ session, children, currentPage, setCurrentPage, onPaymentClick }) {
   const [profile, setProfile] = useState(null)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -26,7 +26,10 @@ export default function Layout({ session, children, currentPage, setCurrentPage 
 
   const sections = [...new Set(navItems.map(i => i.section))]
 
-  const handleNav = (id) => { setCurrentPage(id); setMobileOpen(false) }
+  const handleNav = (id) => {
+    setCurrentPage(id)
+    setMobileOpen(false)
+  }
 
   const NavIcon = ({ path }) => (
     <svg viewBox="0 0 24 24" style={{width:16,height:16,fill:'currentColor',flexShrink:0}}>
@@ -44,15 +47,29 @@ export default function Layout({ session, children, currentPage, setCurrentPage 
         .nav-btn.active{background:rgba(220,38,38,.2);color:#fff}
         .nav-icon{width:28px;height:28px;border-radius:7px;background:rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center;flex-shrink:0}
         .nav-btn.active .nav-icon{background:#DC2626}
+        .sidebar{position:fixed;top:0;left:0;height:100vh;width:240px;background:#1A1D2E;display:flex;flex-direction:column;z-index:30;transition:transform .25s ease}
+        .sidebar.closed{transform:translateX(-100%)}
+        .sidebar.open{transform:translateX(0)}
+        .main-content{flex:1;display:flex;flex-direction:column;overflow:hidden;transition:margin .25s ease}
+        @media(min-width:1024px){
+          .sidebar{transform:translateX(0) !important}
+          .main-content{margin-left:240px}
+          .hamburger{display:none !important}
+        }
+        @media(max-width:1023px){
+          .main-content{margin-left:0}
+        }
         ::-webkit-scrollbar{width:4px}
         ::-webkit-scrollbar-thumb{background:#374151;border-radius:2px}
-        @media(max-width:1024px){.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}}
       `}</style>
 
-      {mobileOpen && <div onClick={() => setMobileOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:20}} />}
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div onClick={() => setMobileOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:20}} />
+      )}
 
       {/* SIDEBAR */}
-      <aside className={`sidebar ${mobileOpen?'open':''}`} style={{width:240,background:'#1A1D2E',display:'flex',flexDirection:'column',flexShrink:0,position:'fixed',top:0,left:0,height:'100vh',zIndex:30,transition:'transform .2s'}}>
+      <aside className={`sidebar ${mobileOpen ? 'open' : 'closed'}`}>
         <div style={{padding:'20px 16px',borderBottom:'1px solid rgba(255,255,255,.06)'}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <div style={{width:38,height:38,background:'#DC2626',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
@@ -86,28 +103,32 @@ export default function Layout({ session, children, currentPage, setCurrentPage 
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{color:'#fff',fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile?.full_name||'Foydalanuvchi'}</div>
-              <div style={{color:'#6B7280',fontSize:11}}>{isBoss?'Boss':'Kassir'}</div>
+              <div style={{color:'#6B7280',fontSize:11}}>{isBoss?'Boss':profile?.role==='viewer'?'Kuzatuvchi':'Kassir'}</div>
             </div>
-            <button onClick={() => supabase.auth.signOut()} style={{background:'none',border:'none',color:'#6B7280',cursor:'pointer',fontSize:16,padding:4,borderRadius:4,transition:'color .15s'}} onMouseOver={e=>e.target.style.color='#EF4444'} onMouseOut={e=>e.target.style.color='#6B7280'}>×</button>
+            <button onClick={() => supabase.auth.signOut()} style={{background:'none',border:'none',color:'#6B7280',cursor:'pointer',fontSize:20,padding:4,lineHeight:1}} onMouseOver={e=>e.target.style.color='#EF4444'} onMouseOut={e=>e.target.style.color='#6B7280'}>×</button>
           </div>
         </div>
       </aside>
 
       {/* MAIN */}
-      <div style={{flex:1,display:'flex',flexDirection:'column',marginLeft:240,overflow:'hidden'}}>
-        <header style={{background:'#fff',borderBottom:'1px solid #E5E7EB',padding:'0 24px',height:60,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+      <div className="main-content">
+        <header style={{background:'#fff',borderBottom:'1px solid #E5E7EB',padding:'0 16px',height:60,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
-            <button onClick={() => setMobileOpen(true)} style={{display:'none',background:'none',border:'none',cursor:'pointer',fontSize:20,color:'#6B7280',padding:4}}>☰</button>
-            <h1 style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:18,color:'#1A1D2E'}}>
+            <button className="hamburger" onClick={() => setMobileOpen(true)} style={{background:'none',border:'none',cursor:'pointer',padding:6,borderRadius:8,color:'#374151',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+              </svg>
+            </button>
+            <h1 style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:17,color:'#1A1D2E'}}>
               {navItems.find(i => i.id === currentPage)?.label || 'Dashboard'}
             </h1>
           </div>
-          <button onClick={() => handleNav('payments')} style={{background:'#DC2626',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:6,fontFamily:'inherit'}}>
-            + To'lov kiritish
+          <button onClick={onPaymentClick} style={{background:'#DC2626',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:6,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+            + To'lov
           </button>
         </header>
 
-        <main style={{flex:1,overflowY:'auto',padding:24}}>
+        <main style={{flex:1,overflowY:'auto',padding:16}}>
           {children}
         </main>
       </div>
