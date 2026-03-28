@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { supabase } from '../lib/supabase'
 
 const Card = ({ label, value, sub, color }) => (
   <div style={{background:'#fff',borderRadius:12,padding:20,border:'1px solid #E5E7EB',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
