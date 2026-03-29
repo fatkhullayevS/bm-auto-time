@@ -69,6 +69,25 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
     }])
     if (error) alert('Xato: ' + error.message)
     else {
+      // Google Sheets ga yuborish
+      const studentData = selectedStudent
+      const paymentData = {
+        record: {
+          paid_at: new Date().toISOString(),
+          amount: Number(form.amount),
+          method: form.method,
+          student_name: studentData.full_name || '',
+          group_name: studentData.groups?.name || '',
+          teacher_name: studentData.groups?.teachers?.full_name || '',
+          cashier_name: session.user.email || ''
+        }
+      }
+      fetch('https://script.google.com/macros/s/AKfycbyPOIprd0RF-2QmViReI_uJp4xswTF1TSKHylzFxBoCRbgiUnDbZzX74FM3RrO0BbVvdA/exec', {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(paymentData)
+      }).catch(() => {})
       setShowModal(false)
       setSelectedStudent(null)
       setSearch('')
