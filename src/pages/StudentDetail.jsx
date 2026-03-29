@@ -29,7 +29,8 @@ export default function StudentDetail({ studentId, onBack, isBoss }) {
   const openDelete = (id) => { setDeleteId(id); setPass(''); setShowDeleteModal(true) }
 
   const confirmDelete = async () => {
-    if (pass !== 'boss123') return alert("Parol noto'g'ri!")
+    const { data: setting } = await supabase.from('settings').select('value').eq('key', 'delete_password').single()
+    if (pass !== setting?.value) return alert("Parol noto'g'ri!")
     setDeleting(true)
     await supabase.from('payments').delete().eq('id', deleteId)
     setShowDeleteModal(false)
@@ -45,12 +46,10 @@ export default function StudentDetail({ studentId, onBack, isBoss }) {
 
   return (
     <div>
-      {/* Back */}
       <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:20,fontFamily:'inherit',padding:0}}>
         ← Orqaga
       </button>
 
-      {/* Student card */}
       <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:24,marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
         <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:20}}>
           <div style={{width:52,height:52,borderRadius:12,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:20,flexShrink:0}}>
@@ -59,7 +58,7 @@ export default function StudentDetail({ studentId, onBack, isBoss }) {
           <div>
             <div style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:20}}>{student.full_name}</div>
             <div style={{fontSize:13,color:'#9CA3AF',marginTop:2}}>
-              {student.phone||'Telefon yo\'q'} · {student.groups?.name||'Guruhsiz'} · {student.groups?.teachers?.full_name||'—'}
+              {student.phone||"Telefon yo'q"} · {student.groups?.name||'Guruhsiz'} · {student.groups?.teachers?.full_name||'—'}
             </div>
             {student.notes && <div style={{fontSize:12,color:'#6B7280',marginTop:4,fontStyle:'italic'}}>"{student.notes}"</div>}
           </div>
@@ -80,7 +79,6 @@ export default function StudentDetail({ studentId, onBack, isBoss }) {
         </div>
       </div>
 
-      {/* Payments */}
       <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
         <div style={{padding:'16px 20px',borderBottom:'1px solid #F3F4F6'}}>
           <span style={{fontWeight:700,fontSize:14}}>Tranzaksiyalar</span>
@@ -121,7 +119,6 @@ export default function StudentDetail({ studentId, onBack, isBoss }) {
         )}
       </div>
 
-      {/* Delete modal */}
       {showDeleteModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,.15)'}}>
