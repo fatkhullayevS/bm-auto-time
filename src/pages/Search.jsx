@@ -15,7 +15,7 @@ export default function Search({ onStudentClick }) {
     setLoading(true)
     const { data } = await supabase
       .from('students')
-      .select('*, groups(name, teachers(full_name)), payments(amount)')
+      .select('*, groups(name), agents(full_name), payments(amount)')
       .ilike('full_name', `%${q}%`)
       .limit(20)
     setResults(data || [])
@@ -66,7 +66,7 @@ export default function Search({ onStudentClick }) {
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:14,marginBottom:3}}>{st.full_name}</div>
                   <div style={{fontSize:12,color:'#9CA3AF'}}>
-                    {st.groups?.name||'Guruhsiz'} · {st.groups?.teachers?.full_name||'—'}
+                    {st.groups?.name||'Guruhsiz'} · {st.agents?.full_name||'—'}
                     {st.phone && ` · ${st.phone}`}
                   </div>
                   {st.notes && <div style={{fontSize:11,color:'#9CA3AF',marginTop:2,fontStyle:'italic'}}>"{st.notes}"</div>}

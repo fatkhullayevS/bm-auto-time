@@ -19,7 +19,7 @@ export default function Archive() {
     setLoading(true)
     const { data } = await supabase
       .from('groups')
-      .select('*, teachers(full_name), students(id, full_name, phone, course_price, notes, enrolled_at, payments(amount, method, paid_at))')
+      .select('*, students(id, full_name, phone, course_price, notes, enrolled_at, agents(full_name), payments(amount, method, paid_at))')
       .order('created_at', { ascending: false })
     setGroups(data || [])
     setLoading(false)
@@ -40,7 +40,7 @@ export default function Archive() {
       ...(g.students?.map(st => {
         const paid = st.payments?.reduce((s,p)=>s+Number(p.amount),0)||0
         const debt = Math.max(0,(st.course_price||0)-paid)
-        return [g.name, g.teachers?.full_name||'', st.full_name, st.phone||'', st.course_price||0, paid, debt, st.notes||'', st.enrolled_at||'']
+        return [g.name, '—'||'', st.full_name, st.phone||'', st.course_price||0, paid, debt, st.notes||'', st.enrolled_at||'']
       }) || [])
     ]
     const csv = rows.map(r => r.join(',')).join('\n')
@@ -109,7 +109,7 @@ export default function Archive() {
                 <div style={{flex:1,minWidth:200}}>
                   <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>{g.name}</div>
                   <div style={{fontSize:12,color:'#9CA3AF'}}>
-                    {g.teachers?.full_name||"O'qituvchi yo'q"} · {s.students} o'quvchi
+                    {'—'||"O'qituvchi yo'q"} · {s.students} o'quvchi
                   </div>
                 </div>
                 <div style={{display:'flex',gap:16,fontSize:13}}>
@@ -144,7 +144,7 @@ export default function Archive() {
             </h2>
             <div style={{background:'#F9FAFB',borderRadius:8,padding:'12px 14px',marginBottom:16,fontSize:13}}>
               <div style={{fontWeight:600,marginBottom:4}}>{confirmGroup.name}</div>
-              <div style={{color:'#6B7280'}}>{getStats(confirmGroup).students} o'quvchi · {confirmGroup.teachers?.full_name||'—'}</div>
+              <div style={{color:'#6B7280'}}>{getStats(confirmGroup).students} o'quvchi · {'—'||'—'}</div>
             </div>
 
             {step===1 ? (
