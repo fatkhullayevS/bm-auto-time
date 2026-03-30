@@ -50,13 +50,13 @@ export default function StudentDetail({ studentId, onBack, isBoss }) {
         ← Orqaga
       </button>
 
-      <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:24,marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
-        <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:20}}>
-          <div style={{width:52,height:52,borderRadius:12,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:20,flexShrink:0}}>
+      <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:20,marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:16,flexWrap:'wrap'}}>
+          <div style={{width:48,height:48,borderRadius:12,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:20,flexShrink:0}}>
             {student.full_name[0]}
           </div>
           <div>
-            <div style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:20}}>{student.full_name}</div>
+            <div style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:18}}>{student.full_name}</div>
             <div style={{fontSize:13,color:'#9CA3AF',marginTop:2}}>
               {student.phone||"Telefon yo'q"} · {student.groups?.name||'Guruhsiz'} · {student.groups?.teachers?.full_name||'—'}
             </div>
@@ -64,58 +64,49 @@ export default function StudentDetail({ studentId, onBack, isBoss }) {
           </div>
         </div>
 
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10}}>
           {[
             { label:'Kurs narxi', val: fmt(student.course_price||0) },
             { label:"To'langan", val: fmt(totalPaid), color:'#059669' },
             { label:'Qarz', val: fmt(debt), color: debt>0?'#DC2626':'#9CA3AF' },
             { label:"To'lovlar soni", val: payments.length + ' ta' },
           ].map((item,i) => (
-            <div key={i} style={{background:'#F9FAFB',borderRadius:8,padding:'12px 14px'}}>
-              <div style={{fontSize:11,color:'#9CA3AF',marginBottom:4,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>{item.label}</div>
-              <div style={{fontSize:16,fontWeight:700,color:item.color||'#1A1D2E'}}>{item.val}</div>
+            <div key={i} style={{background:'#F9FAFB',borderRadius:8,padding:'10px 12px'}}>
+              <div style={{fontSize:10,color:'#9CA3AF',marginBottom:3,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>{item.label}</div>
+              <div style={{fontSize:15,fontWeight:700,color:item.color||'#1A1D2E'}}>{item.val}</div>
             </div>
           ))}
         </div>
       </div>
 
       <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
-        <div style={{padding:'16px 20px',borderBottom:'1px solid #F3F4F6'}}>
+        <div style={{padding:'14px 18px',borderBottom:'1px solid #F3F4F6'}}>
           <span style={{fontWeight:700,fontSize:14}}>Tranzaksiyalar</span>
         </div>
         {payments.length === 0 ? (
           <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>Hozircha to'lovlar yo'q</div>
         ) : (
-          <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead>
-              <tr style={{background:'#FAFAFA'}}>
-                {['Summa','Usul','Kassir','Sana',''].map((h,i) => (
-                  <th key={i} style={{padding:'10px 16px',textAlign:'left',fontSize:11,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:'.05em',borderBottom:'1px solid #F3F4F6',whiteSpace:'nowrap'}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((p,i) => (
-                <tr key={i} style={{borderBottom:'1px solid #F9FAFB'}} onMouseOver={e=>e.currentTarget.style.background='#FAFBFF'} onMouseOut={e=>e.currentTarget.style.background=''}>
-                  <td style={{padding:'12px 16px',fontSize:14,fontWeight:700,color:'#059669'}}>{fmt(p.amount)}</td>
-                  <td style={{padding:'12px 16px'}}>
-                    <span style={{padding:'3px 8px',borderRadius:5,fontSize:11,fontWeight:600,background:p.method==='cash'?'#ECFDF5':'#EEF2FF',color:p.method==='cash'?'#059669':'#4338CA'}}>
-                      {p.method==='cash'?'Naqd':'Karta'}
-                    </span>
-                  </td>
-                  <td style={{padding:'12px 16px',fontSize:12,color:'#9CA3AF'}}>{p.profiles?.full_name||'—'}</td>
-                  <td style={{padding:'12px 16px',fontSize:12,color:'#9CA3AF',whiteSpace:'nowrap'}}>{fmtDate(p.paid_at)}</td>
-                  <td style={{padding:'12px 16px'}}>
-                    {isBoss && (
-                      <button onClick={() => openDelete(p.id)} style={{background:'#FEF2F2',border:'none',borderRadius:6,padding:'5px 10px',fontSize:12,cursor:'pointer',color:'#DC2626',fontFamily:'inherit'}}>
-                        O'chirish
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div>
+            {payments.map((p,i) => (
+              <div key={i} style={{padding:'14px 18px',borderBottom:'1px solid #F9FAFB',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                <div style={{flex:1,minWidth:120}}>
+                  <div style={{fontSize:15,fontWeight:700,color:'#059669'}}>{fmt(p.amount)}</div>
+                  <div style={{fontSize:11,color:'#9CA3AF',marginTop:2}}>{fmtDate(p.paid_at)}</div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                  <span style={{padding:'3px 8px',borderRadius:5,fontSize:11,fontWeight:600,background:p.method==='cash'?'#ECFDF5':'#EEF2FF',color:p.method==='cash'?'#059669':'#4338CA'}}>
+                    {p.method==='cash'?'Naqd':'Karta'}
+                  </span>
+                  <span style={{fontSize:12,color:'#9CA3AF'}}>{p.profiles?.full_name||'—'}</span>
+                  {isBoss && (
+                    <button onClick={() => openDelete(p.id)} style={{background:'#FEF2F2',border:'none',borderRadius:6,padding:'5px 10px',fontSize:12,cursor:'pointer',color:'#DC2626',fontFamily:'inherit'}}>
+                      O'chirish
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

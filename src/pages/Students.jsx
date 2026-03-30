@@ -11,19 +11,22 @@ export default function Students({ isBoss, onStudentClick }) {
   const [showModal, setShowModal] = useState(false)
   const [filterGroup, setFilterGroup] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [form, setForm] = useState({ full_name:'', phone:'', group_id:'', notes:'', course_price:'' })
+  const [defaultPrice, setDefaultPrice] = useState(4060000)
+  const [form, setForm] = useState({ full_name:'', phone:'', group_id:'', notes:'' })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
   const loadData = async () => {
     setLoading(true)
-    const [{ data: st }, { data: gr }] = await Promise.all([
+    const [{ data: st }, { data: gr }, { data: setting }] = await Promise.all([
       supabase.from('students').select('*, groups(name, teachers(full_name)), payments(amount)').order('created_at', { ascending: false }),
-      supabase.from('groups').select('id, name, course_price').eq('status','active')
+      supabase.from('groups').select('id, name').eq('status','active'),
+      supabase.from('settings').select('value').eq('key','course_price').single()
     ])
     setStudents(st || [])
     setGroups(gr || [])
+    if (setting?.value) setDefaultPrice(Number(setting.value))
     setLoading(false)
   }
 
@@ -39,19 +42,19 @@ export default function Students({ isBoss, onStudentClick }) {
 
   const saveStudent = async () => {
     if (!form.full_name.trim()) return alert("Ism kiriting!")
-    if (!form.course_price || Number(form.course_price) <= 0) return alert("Kurs narxini kiriting!")
+    if (!form.phone.trim()) return alert("Telefon kiriting!")
     setSaving(true)
     const { error } = await supabase.from('students').insert([{
       full_name: form.full_name,
       phone: form.phone,
       group_id: form.group_id || null,
       notes: form.notes,
-      course_price: Number(form.course_price)
+      course_price: defaultPrice
     }])
     if (error) alert('Xato: ' + error.message)
     else {
       setShowModal(false)
-      setForm({ full_name:'', phone:'', group_id:'', notes:'', course_price:'' })
+      setForm({ full_name:'', phone:'', group_id:'', notes:'' })
       loadData()
     }
     setSaving(false)
@@ -89,7 +92,7 @@ export default function Students({ isBoss, onStudentClick }) {
 
       <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
         <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:600}}>
             <thead>
               <tr style={{background:'#FAFAFA'}}>
                 {["O'quvchi","Guruh","O'qituvchi","Kurs narxi","To'langan","Qarz","Holat",""].map((h,i) => (
@@ -142,10 +145,10 @@ export default function Students({ isBoss, onStudentClick }) {
 
       {showModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setShowModal(false)}>
-          <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:480,boxShadow:'0 20px 60px rgba(0,0,0,.15)'}}>
+          <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:480,boxShadow:'0 20px 60px rgba(0,0,0,.15)',maxHeight:'90vh',overflowY:'auto'}}>
             <h2 style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:18,marginBottom:20}}>O'quvchi qo'shish</h2>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20}}>
-              <div style={{gridColumn:'1/-1'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:14,marginBottom:20}}>
+              <div>
                 <label style={labelStyle}>Ism Familiya *</label>
                 <input value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})} placeholder="Sardor Aliyev" style={inputStyle}/>
               </div>
@@ -160,11 +163,12 @@ export default function Students({ isBoss, onStudentClick }) {
                   {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
-              <div style={{gridColumn:'1/-1'}}>
-                <label style={labelStyle}>Kurs narxi (so'm) *</label>
-                <input type="number" value={form.course_price} onChange={e=>setForm({...form,course_price:e.target.value})} placeholder="1200000" style={inputStyle}/>
+              <div style={{background:'#F9FAFB',borderRadius:8,padding:'12px 14px',border:'1px solid #E5E7EB'}}>
+                <div style={{fontSize:12,fontWeight:600,color:'#6B7280',marginBottom:4}}>KURS NARXI</div>
+                <div style={{fontSize:18,fontWeight:800,color:'#1A1D2E'}}>{fmt(defaultPrice)}</div>
+                <div style={{fontSize:11,color:'#9CA3AF',marginTop:2}}>Barcha o'quvchilar uchun bir xil narx</div>
               </div>
-              <div style={{gridColumn:'1/-1'}}>
+              <div>
                 <label style={labelStyle}>Izoh</label>
                 <input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Qo'shimcha izoh..." style={inputStyle}/>
               </div>
