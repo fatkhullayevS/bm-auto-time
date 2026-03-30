@@ -18,7 +18,7 @@ export default function StudentDetail({ studentId, onBack, isBoss }) {
   const loadData = async () => {
     setLoading(true)
     const [{ data: st }, { data: pays }] = await Promise.all([
-      supabase.from('students').select('*, groups(name, teachers(full_name))').eq('id', studentId).single(),
+      supabase.from('students').select('*, groups(name), agents(full_name)').eq('id', studentId).single(),
       supabase.from('payments').select('*, profiles(full_name)').eq('student_id', studentId).order('paid_at', { ascending: false })
     ])
     setStudent(st)
