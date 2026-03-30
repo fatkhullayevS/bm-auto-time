@@ -6,7 +6,6 @@ const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(n) + " so'm"
 
 export default function Payments({ isBoss, session, openModal, setOpenModal }) {
   const [payments, setPayments] = useState([])
-  const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -63,6 +62,10 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
   const savePayment = async () => {
     if (!selectedStudent) return alert("O'quvchi tanlang!")
     if (!form.amount || Number(form.amount) <= 0) return alert("Summa kiriting!")
+    const pass = window.prompt("To'lov kiritish uchun parolni kiriting:")
+    if (!pass) return
+    const { data: setting } = await supabase.from('settings').select('value').eq('key', 'view_password').single()
+    if (pass !== setting?.value) return alert("Parol noto'g'ri!")
     setSaving(true)
     const { error } = await supabase.from('payments').insert([{
       student_id: selectedStudent.id,
@@ -75,22 +78,21 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
     if (error) alert('Xato: ' + error.message)
     else {
       const studentData = selectedStudent
-      const paymentData = {
-        record: {
-          paid_at: new Date().toISOString(),
-          amount: Number(form.amount),
-          method: form.method,
-          student_name: studentData.full_name || '',
-          group_name: studentData.groups?.name || '',
-          teacher_name: studentData.groups?.teachers?.full_name || '',
-          cashier_name: session.user.email || ''
-        }
-      }
       fetch('https://script.google.com/macros/s/AKfycbyPOIprd0RF-2QmViReI_uJp4xswTF1TSKHylzFxBoCRbgiUnDbZzX74FM3RrO0BbVvdA/exec', {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(paymentData)
+        body: JSON.stringify({
+          record: {
+            paid_at: new Date().toISOString(),
+            amount: Number(form.amount),
+            method: form.method,
+            student_name: studentData.full_name || '',
+            group_name: studentData.groups?.name || '',
+            teacher_name: '',
+            cashier_name: session.user.email || ''
+          }
+        })
       }).catch(() => {})
       closeModal()
       loadPayments()
@@ -185,7 +187,6 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
         ))}
       </div>
 
-      {/* To'lov kiritish modal */}
       {showModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&closeModal()}>
           <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:480,boxShadow:'0 20px 60px rgba(0,0,0,.15)',maxHeight:'90vh',overflowY:'auto'}}>
@@ -254,7 +255,6 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
         </div>
       )}
 
-      {/* O'chirish modal */}
       {showDeleteModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,.15)'}}>
