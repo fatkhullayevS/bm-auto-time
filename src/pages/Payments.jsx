@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { checkDeletePassword } from '../lib/checkPassword'
 
 const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(n) + " so'm"
 
@@ -8,6 +9,10 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
   const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteId, setDeleteId] = useState(null)
+  const [deletePass, setDeletePass] = useState('')
+  const [deleting, setDeleting] = useState(false)
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [selectedStudent, setSelectedStudent] = useState(null)
@@ -69,7 +74,6 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
     }])
     if (error) alert('Xato: ' + error.message)
     else {
-      // Google Sheets ga yuborish
       const studentData = selectedStudent
       const paymentData = {
         record: {
@@ -88,13 +92,22 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(paymentData)
       }).catch(() => {})
-      setShowModal(false)
-      setSelectedStudent(null)
-      setSearch('')
-      setForm({ amount:'', method:'cash', notes:'' })
+      closeModal()
       loadPayments()
     }
     setSaving(false)
+  }
+
+  const openDeleteModal = (id) => { setDeleteId(id); setDeletePass(''); setShowDeleteModal(true) }
+
+  const confirmDelete = async () => {
+    const ok = await checkDeletePassword(deletePass)
+    if (!ok) return alert("Parol noto'g'ri!")
+    setDeleting(true)
+    await supabase.from('payments').delete().eq('id', deleteId)
+    setShowDeleteModal(false)
+    loadPayments()
+    setDeleting(false)
   }
 
   const closeModal = () => {
@@ -113,15 +126,12 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
   })
 
   const totalFiltered = filtered.reduce((s,p) => s+Number(p.amount), 0)
-
   const fmtDate = (d) => new Date(d).toLocaleString('uz-UZ', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
-
   const inputStyle = { width:'100%', padding:'9px 12px', border:'1px solid #E5E7EB', borderRadius:8, fontSize:13, fontFamily:'inherit', outline:'none', boxSizing:'border-box' }
   const labelStyle = { display:'block', fontSize:12, fontWeight:600, color:'#6B7280', marginBottom:5 }
 
   return (
     <div>
-      {/* Filters */}
       <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
         <select value={filterMethod} onChange={e=>setFilterMethod(e.target.value)} style={{padding:'8px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:13,fontFamily:'inherit',background:'#fff'}}>
           <option value="">Barcha usullar</option>
@@ -131,16 +141,13 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
         <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={{padding:'8px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:13,fontFamily:'inherit'}}/>
         <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{padding:'8px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:13,fontFamily:'inherit'}}/>
         {(filterMethod||dateFrom||dateTo) && (
-          <button onClick={()=>{setFilterMethod('');setDateFrom('');setDateTo('')}} style={{padding:'8px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:12,background:'#fff',cursor:'pointer',fontFamily:'inherit',color:'#6B7280'}}>
-            Tozalash ×
-          </button>
+          <button onClick={()=>{setFilterMethod('');setDateFrom('');setDateTo('')}} style={{padding:'8px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:12,background:'#fff',cursor:'pointer',fontFamily:'inherit',color:'#6B7280'}}>Tozalash ×</button>
         )}
         <button onClick={() => setShowModal(true)} style={{marginLeft:'auto',background:'#DC2626',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
           + To'lov kiritish
         </button>
       </div>
 
-      {/* Summary */}
       {filtered.length > 0 && (
         <div style={{background:'#fff',borderRadius:10,border:'1px solid #E5E7EB',padding:'12px 16px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <span style={{fontSize:13,color:'#6B7280'}}>{filtered.length} ta to'lov</span>
@@ -148,68 +155,45 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
         </div>
       )}
 
-      {/* Table */}
       <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
-        <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead>
-              <tr style={{background:'#FAFAFA'}}>
-                {["O'quvchi","Guruh","Kassir","Summa","Usul","Sana"].map((h,i) => (
-                  <th key={i} style={{padding:'10px 16px',textAlign:'left',fontSize:11,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:'.05em',borderBottom:'1px solid #F3F4F6',whiteSpace:'nowrap'}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={6} style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>Yuklanmoqda...</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>To'lovlar yo'q</td></tr>
-              ) : filtered.map((p,i) => (
-                <tr key={i} style={{borderBottom:'1px solid #F9FAFB'}} onMouseOver={e=>e.currentTarget.style.background='#FAFBFF'} onMouseOut={e=>e.currentTarget.style.background=''}>
-                  <td style={{padding:'12px 16px'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      <div style={{width:28,height:28,borderRadius:7,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:11,fontWeight:700,flexShrink:0}}>
-                        {p.students?.full_name?.[0]||'?'}
-                      </div>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:600}}>{p.students?.full_name||'—'}</div>
-                        {p.students?.phone && <div style={{fontSize:11,color:'#9CA3AF'}}>{p.students.phone}</div>}
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{padding:'12px 16px',fontSize:13,color:'#6B7280'}}>{p.students?.groups?.name||'—'}</td>
-                  <td style={{padding:'12px 16px',fontSize:12,color:'#9CA3AF'}}>{p.profiles?.full_name||'—'}</td>
-                  <td style={{padding:'12px 16px',fontSize:13,fontWeight:700,color:'#1A1D2E'}}>{fmt(p.amount)}</td>
-                  <td style={{padding:'12px 16px'}}>
-                    <span style={{padding:'3px 8px',borderRadius:5,fontSize:11,fontWeight:600,background:p.method==='cash'?'#ECFDF5':'#EEF2FF',color:p.method==='cash'?'#059669':'#4338CA'}}>
-                      {p.method==='cash'?'Naqd':'Karta'}
-                    </span>
-                  </td>
-                  <td style={{padding:'12px 16px',fontSize:12,color:'#9CA3AF',whiteSpace:'nowrap'}}>{fmtDate(p.paid_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {loading ? (
+          <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>Yuklanmoqda...</div>
+        ) : filtered.length === 0 ? (
+          <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>To'lovlar yo'q</div>
+        ) : filtered.map((p,i) => (
+          <div key={i} style={{padding:'14px 18px',borderBottom:'1px solid #F9FAFB',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}} onMouseOver={e=>e.currentTarget.style.background='#FAFBFF'} onMouseOut={e=>e.currentTarget.style.background=''}>
+            <div style={{width:32,height:32,borderRadius:8,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700,flexShrink:0}}>
+              {p.students?.full_name?.[0]||'?'}
+            </div>
+            <div style={{flex:1,minWidth:120}}>
+              <div style={{fontSize:13,fontWeight:600}}>{p.students?.full_name||'—'}</div>
+              <div style={{fontSize:11,color:'#9CA3AF'}}>{p.students?.groups?.name||'—'} · {p.profiles?.full_name||'—'}</div>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+              <span style={{fontSize:14,fontWeight:700,color:'#1A1D2E'}}>{fmt(p.amount)}</span>
+              <span style={{padding:'3px 8px',borderRadius:5,fontSize:11,fontWeight:600,background:p.method==='cash'?'#ECFDF5':'#EEF2FF',color:p.method==='cash'?'#059669':'#4338CA'}}>
+                {p.method==='cash'?'Naqd':'Karta'}
+              </span>
+              <span style={{fontSize:12,color:'#9CA3AF',whiteSpace:'nowrap'}}>{fmtDate(p.paid_at)}</span>
+              {isBoss && (
+                <button onClick={() => openDeleteModal(p.id)} style={{background:'#FEF2F2',border:'none',borderRadius:6,padding:'5px 10px',fontSize:12,cursor:'pointer',color:'#DC2626',fontFamily:'inherit'}}>
+                  O'chirish
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Modal */}
+      {/* To'lov kiritish modal */}
       {showModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&closeModal()}>
-          <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:480,boxShadow:'0 20px 60px rgba(0,0,0,.15)'}}>
+          <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:480,boxShadow:'0 20px 60px rgba(0,0,0,.15)',maxHeight:'90vh',overflowY:'auto'}}>
             <h2 style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:18,marginBottom:20}}>To'lov kiritish</h2>
-
-            {/* Student search */}
             <div style={{marginBottom:14}}>
               <label style={labelStyle}>O'quvchi (faqat qarzdorlar) *</label>
               <div style={{position:'relative'}}>
-                <input
-                  value={search}
-                  onChange={e=>searchStudents(e.target.value)}
-                  placeholder="Ism bo'yicha qidiring..."
-                  style={inputStyle}
-                  autoComplete="off"
-                />
+                <input value={search} onChange={e=>searchStudents(e.target.value)} placeholder="Ism bo'yicha qidiring..." style={inputStyle} autoComplete="off"/>
                 {searchResults.length > 0 && (
                   <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:'1px solid #E5E7EB',borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.1)',zIndex:10,maxHeight:200,overflowY:'auto',marginTop:4}}>
                     {searchResults.map(st => (
@@ -227,25 +211,20 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
                 )}
               </div>
             </div>
-
-            {/* Selected student info */}
             {selectedStudent && (
               <div style={{background:'#FEF2F2',border:'1px solid #FECACA',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:13}}>
                 <div style={{fontWeight:600,color:'#991B1B',marginBottom:3}}>{selectedStudent.full_name}</div>
                 <div style={{color:'#DC2626',fontSize:12}}>
-                  Kurs narxi: {fmt(selectedStudent.course_price||0)} · 
-                  To'langan: {fmt(getPaid(selectedStudent))} · 
-                  Qarz: {fmt(getDebt(selectedStudent))}
+                  Kurs narxi: {fmt(selectedStudent.course_price||0)} · To'langan: {fmt(getPaid(selectedStudent))} · Qarz: {fmt(getDebt(selectedStudent))}
                 </div>
               </div>
             )}
-
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
-              <div style={{gridColumn:'1/-1'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:14,marginBottom:14}}>
+              <div>
                 <label style={labelStyle}>Summa (so'm) *</label>
                 <input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="500000" style={inputStyle}/>
               </div>
-              <div style={{gridColumn:'1/-1'}}>
+              <div>
                 <label style={labelStyle}>To'lov usuli</label>
                 <div style={{display:'flex',gap:8}}>
                   {[{val:'cash',label:'Naqd pul'},{val:'card',label:'Karta'}].map(m => (
@@ -255,22 +234,40 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
                   ))}
                 </div>
               </div>
-              <div style={{gridColumn:'1/-1'}}>
+              <div>
                 <label style={labelStyle}>Izoh</label>
                 <input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Ixtiyoriy izoh..." style={inputStyle}/>
               </div>
             </div>
-
             {selectedStudent && form.amount && (
               <div style={{background:'#ECFDF5',border:'1px solid #A7F3D0',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:13,color:'#065F46'}}>
                 To'lovdan keyin qoladi: <strong>{fmt(Math.max(0, getDebt(selectedStudent) - Number(form.amount)))}</strong>
               </div>
             )}
-
             <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
               <button onClick={closeModal} style={{padding:'9px 18px',borderRadius:8,border:'1px solid #E5E7EB',background:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Bekor</button>
               <button onClick={savePayment} disabled={saving} style={{padding:'9px 18px',borderRadius:8,border:'none',background:'#DC2626',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
                 {saving ? 'Saqlanmoqda...' : 'Saqlash'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* O'chirish modal */}
+      {showDeleteModal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,.15)'}}>
+            <h2 style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:18,marginBottom:8}}>Tranzaksiyani o'chirish</h2>
+            <p style={{fontSize:13,color:'#6B7280',marginBottom:20}}>Bu amalni qaytarib bo'lmaydi. Maxsus parolni kiriting.</p>
+            <div style={{marginBottom:20}}>
+              <label style={{display:'block',fontSize:12,fontWeight:600,color:'#6B7280',marginBottom:5}}>Maxsus parol</label>
+              <input type="password" value={deletePass} onChange={e=>setDeletePass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&confirmDelete()} placeholder="Parol kiriting..." style={{width:'100%',padding:'9px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:13,fontFamily:'inherit',outline:'none',boxSizing:'border-box'}}/>
+            </div>
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+              <button onClick={() => setShowDeleteModal(false)} style={{padding:'9px 18px',borderRadius:8,border:'1px solid #E5E7EB',background:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Bekor</button>
+              <button onClick={confirmDelete} disabled={deleting} style={{padding:'9px 18px',borderRadius:8,border:'none',background:'#DC2626',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+                {deleting ? "O'chirilmoqda..." : "O'chirish"}
               </button>
             </div>
           </div>
