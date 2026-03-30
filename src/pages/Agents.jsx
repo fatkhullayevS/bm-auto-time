@@ -11,29 +11,34 @@ export default function Agents({ isBoss, onStudentClick }) {
   const [editItem, setEditItem] = useState(null)
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [agentStudents, setAgentStudents] = useState([])
+  const [loadingStudents, setLoadingStudents] = useState(false)
   const [form, setForm] = useState({ full_name:'', phone:'' })
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadAgents() }, [])
 
-  const loadData = async () => {
+  const loadAgents = async () => {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('agents')
-      .select('*, students(id, full_name, phone, course_price, groups(name), payments(amount))')
-      .order('created_at', { ascending: false })
+      .select('id, full_name, phone')
+      .order('full_name')
+    if (error) console.error('Agents error:', error)
     setAgents(data || [])
     setLoading(false)
   }
 
   const openAgent = async (agent) => {
     setSelectedAgent(agent)
-    const { data } = await supabase
+    setLoadingStudents(true)
+    const { data, error } = await supabase
       .from('students')
-      .select('*, groups(name), payments(amount)')
+      .select('id, full_name, phone, course_price, groups(name), payments(amount)')
       .eq('agent_id', agent.id)
       .order('created_at', { ascending: false })
+    if (error) console.error('Students error:', error)
     setAgentStudents(data || [])
+    setLoadingStudents(false)
   }
 
   const openAdd = () => { setEditItem(null); setForm({ full_name:'', phone:'' }); setShowModal(true) }
@@ -42,22 +47,26 @@ export default function Agents({ isBoss, onStudentClick }) {
   const save = async () => {
     if (!form.full_name.trim()) return alert("Ism kiriting!")
     setSaving(true)
-    if (editItem) await supabase.from('agents').update(form).eq('id', editItem.id)
-    else await supabase.from('agents').insert([form])
+    if (editItem) {
+      await supabase.from('agents').update(form).eq('id', editItem.id)
+      if (selectedAgent?.id === editItem.id) setSelectedAgent({...selectedAgent, ...form})
+    } else {
+      await supabase.from('agents').insert([form])
+    }
     setShowModal(false)
-    loadData()
-    if (selectedAgent?.id === editItem?.id) setSelectedAgent({...selectedAgent, ...form})
+    loadAgents()
     setSaving(false)
   }
 
-  const deleteAgent = async (id) => {
+  const deleteAgent = async (id, e) => {
+    e.stopPropagation()
     const pass = window.prompt("O'chirish uchun maxsus parolni kiriting:")
     if (!pass) return
     const ok = await checkDeletePassword(pass)
     if (!ok) return alert("Parol noto'g'ri!")
     await supabase.from('agents').delete().eq('id', id)
     if (selectedAgent?.id === id) setSelectedAgent(null)
-    loadData()
+    loadAgents()
   }
 
   const getPaid = (st) => st.payments?.reduce((s,p) => s+Number(p.amount), 0) || 0
@@ -66,7 +75,7 @@ export default function Agents({ isBoss, onStudentClick }) {
   const inputStyle = { width:'100%', padding:'9px 12px', border:'1px solid #E5E7EB', borderRadius:8, fontSize:13, fontFamily:'inherit', outline:'none', boxSizing:'border-box' }
   const labelStyle = { display:'block', fontSize:12, fontWeight:600, color:'#6B7280', marginBottom:5 }
 
-  // Agent detail view
+  // Agent detail
   if (selectedAgent) {
     const totalExpected = agentStudents.reduce((s,st) => s+(st.course_price||0), 0)
     const totalPaid = agentStudents.reduce((s,st) => s+getPaid(st), 0)
@@ -74,7 +83,7 @@ export default function Agents({ isBoss, onStudentClick }) {
 
     return (
       <div>
-        <button onClick={() => setSelectedAgent(null)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:20,fontFamily:'inherit',padding:0}}>
+        <button onClick={() => { setSelectedAgent(null); setAgentStudents([]) }} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:20,fontFamily:'inherit',padding:0}}>
           ← Orqaga
         </button>
 
@@ -96,7 +105,7 @@ export default function Agents({ isBoss, onStudentClick }) {
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10}}>
             {[
               { label:"O'quvchilar", val: agentStudents.length + ' ta' },
-              { label:'Kutilgan', val: fmt(totalExpected), color:'#1A1D2E' },
+              { label:'Kutilgan', val: fmt(totalExpected) },
               { label:'Tushgan', val: fmt(totalPaid), color:'#059669' },
               { label:'Qarz', val: fmt(totalDebt), color: totalDebt>0?'#DC2626':'#9CA3AF' },
             ].map((item,i) => (
@@ -112,7 +121,9 @@ export default function Agents({ isBoss, onStudentClick }) {
           <div style={{padding:'14px 18px',borderBottom:'1px solid #F3F4F6'}}>
             <span style={{fontWeight:700,fontSize:14}}>O'quvchilar</span>
           </div>
-          {agentStudents.length === 0 ? (
+          {loadingStudents ? (
+            <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>Yuklanmoqda...</div>
+          ) : agentStudents.length === 0 ? (
             <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>O'quvchilar yo'q</div>
           ) : agentStudents.map(st => {
             const paid = getPaid(st)
@@ -124,7 +135,7 @@ export default function Agents({ isBoss, onStudentClick }) {
                   <div style={{fontSize:13,fontWeight:600}}>{st.full_name}</div>
                   <div style={{fontSize:11,color:'#9CA3AF'}}>{st.groups?.name||'Guruhsiz'} · {st.phone||''}</div>
                 </div>
-                <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+                <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                   <span style={{fontSize:13,fontWeight:600,color:'#059669'}}>{fmt(paid)}</span>
                   {debt > 0 && <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,background:'#FEF2F2',color:'#DC2626'}}>Qarz: {fmt(debt)}</span>}
                   {debt === 0 && st.course_price > 0 && <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,background:'#ECFDF5',color:'#059669'}}>To'liq</span>}
@@ -148,22 +159,15 @@ export default function Agents({ isBoss, onStudentClick }) {
         )}
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16}}>
-        {loading ? (
-          <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>Yuklanmoqda...</div>
-        ) : agents.length === 0 ? (
-          <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>Ma'sullar yo'q</div>
-        ) : agents.map(a => {
-          const students = a.students || []
-          const totalPaid = students.reduce((s,st) => s+(st.payments?.reduce((ss,p)=>ss+Number(p.amount),0)||0), 0)
-          const totalExpected = students.reduce((s,st) => s+(st.course_price||0), 0)
-          const totalDebt = students.reduce((s,st) => {
-            const paid = st.payments?.reduce((ss,p)=>ss+Number(p.amount),0)||0
-            return s + Math.max(0,(st.course_price||0)-paid)
-          }, 0)
-          return (
-            <div key={a.id} onClick={() => openAgent(a)} style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:20,boxShadow:'0 1px 3px rgba(0,0,0,.06)',cursor:'pointer',transition:'all .15s'}} onMouseOver={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.1)'} onMouseOut={e=>e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,.06)'}>
-              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+      {loading ? (
+        <div style={{textAlign:'center',padding:60,color:'#9CA3AF',fontSize:13}}>Yuklanmoqda...</div>
+      ) : agents.length === 0 ? (
+        <div style={{textAlign:'center',padding:60,color:'#9CA3AF',fontSize:13}}>Ma'sullar yo'q</div>
+      ) : (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16}}>
+          {agents.map(a => (
+            <div key={a.id} onClick={() => openAgent(a)} style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:20,boxShadow:'0 1px 3px rgba(0,0,0,.06)',cursor:'pointer',transition:'box-shadow .15s'}} onMouseOver={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.1)'} onMouseOut={e=>e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,.06)'}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
                 <div style={{width:42,height:42,borderRadius:10,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:16,flexShrink:0}}>
                   {a.full_name[0]}
                 </div>
@@ -174,27 +178,14 @@ export default function Agents({ isBoss, onStudentClick }) {
                 {isBoss && (
                   <div style={{display:'flex',gap:4}} onClick={e=>e.stopPropagation()}>
                     <button onClick={() => openEdit(a)} style={{background:'#F3F4F6',border:'none',borderRadius:6,padding:'5px 8px',fontSize:12,cursor:'pointer'}}>✏️</button>
-                    <button onClick={() => deleteAgent(a.id)} style={{background:'#FEF2F2',border:'none',borderRadius:6,padding:'5px 8px',fontSize:12,cursor:'pointer',color:'#DC2626'}}>×</button>
+                    <button onClick={(e) => deleteAgent(a.id, e)} style={{background:'#FEF2F2',border:'none',borderRadius:6,padding:'5px 8px',fontSize:12,cursor:'pointer',color:'#DC2626'}}>×</button>
                   </div>
                 )}
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                {[
-                  { label:"O'quvchilar", val: students.length + ' ta' },
-                  { label:'Tushgan', val: fmt(totalPaid), color:'#059669' },
-                  { label:'Kutilgan', val: fmt(totalExpected) },
-                  { label:'Qarz', val: fmt(totalDebt), color: totalDebt>0?'#DC2626':'#9CA3AF' },
-                ].map((item,i) => (
-                  <div key={i} style={{background:'#F9FAFB',borderRadius:8,padding:'8px 10px'}}>
-                    <div style={{fontSize:10,color:'#9CA3AF',marginBottom:2,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>{item.label}</div>
-                    <div style={{fontSize:13,fontWeight:700,color:item.color||'#1A1D2E'}}>{item.val}</div>
-                  </div>
-                ))}
-              </div>
             </div>
-          )
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
       {showModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setShowModal(false)}>
