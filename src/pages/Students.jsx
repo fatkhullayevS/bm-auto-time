@@ -7,25 +7,28 @@ const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(n) + " so'm"
 export default function Students({ isBoss, onStudentClick }) {
   const [students, setStudents] = useState([])
   const [groups, setGroups] = useState([])
+  const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [filterGroup, setFilterGroup] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [defaultPrice, setDefaultPrice] = useState(4060000)
-  const [form, setForm] = useState({ full_name:'', phone:'', group_id:'', notes:'' })
+  const [form, setForm] = useState({ full_name:'', phone:'', group_id:'', agent_id:'', notes:'' })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
   const loadData = async () => {
     setLoading(true)
-    const [{ data: st }, { data: gr }, { data: setting }] = await Promise.all([
-      supabase.from('students').select('*, groups(name, teachers(full_name)), payments(amount)').order('created_at', { ascending: false }),
+    const [{ data: st }, { data: gr }, { data: ag }, { data: setting }] = await Promise.all([
+      supabase.from('students').select('*, groups(name), agents(full_name), payments(amount)').order('created_at', { ascending: false }),
       supabase.from('groups').select('id, name').eq('status','active'),
+      supabase.from('agents').select('id, full_name').order('full_name'),
       supabase.from('settings').select('value').eq('key','course_price').single()
     ])
     setStudents(st || [])
     setGroups(gr || [])
+    setAgents(ag || [])
     if (setting?.value) setDefaultPrice(Number(setting.value))
     setLoading(false)
   }
@@ -48,13 +51,14 @@ export default function Students({ isBoss, onStudentClick }) {
       full_name: form.full_name,
       phone: form.phone,
       group_id: form.group_id || null,
+      agent_id: form.agent_id || null,
       notes: form.notes,
       course_price: defaultPrice
     }])
     if (error) alert('Xato: ' + error.message)
     else {
       setShowModal(false)
-      setForm({ full_name:'', phone:'', group_id:'', notes:'' })
+      setForm({ full_name:'', phone:'', group_id:'', agent_id:'', notes:'' })
       loadData()
     }
     setSaving(false)
@@ -92,10 +96,10 @@ export default function Students({ isBoss, onStudentClick }) {
 
       <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
         <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',minWidth:600}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:650}}>
             <thead>
               <tr style={{background:'#FAFAFA'}}>
-                {["O'quvchi","Guruh","O'qituvchi","Kurs narxi","To'langan","Qarz","Holat",""].map((h,i) => (
+                {["O'quvchi","Guruh","Ma'sul","Kurs narxi","To'langan","Qarz","Holat",""].map((h,i) => (
                   <th key={i} style={{padding:'10px 16px',textAlign:'left',fontSize:11,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:'.05em',borderBottom:'1px solid #F3F4F6',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
@@ -121,7 +125,7 @@ export default function Students({ isBoss, onStudentClick }) {
                       </div>
                     </td>
                     <td style={{padding:'12px 16px',fontSize:13,color:'#6B7280'}}>{st.groups?.name||'—'}</td>
-                    <td style={{padding:'12px 16px',fontSize:13,color:'#6B7280'}}>{st.groups?.teachers?.full_name||'—'}</td>
+                    <td style={{padding:'12px 16px',fontSize:13,color:'#6B7280'}}>{st.agents?.full_name||'—'}</td>
                     <td style={{padding:'12px 16px',fontSize:13,fontWeight:600}}>{price>0?fmt(price):'—'}</td>
                     <td style={{padding:'12px 16px',fontSize:13,fontWeight:600,color:'#059669'}}>{fmt(paid)}</td>
                     <td style={{padding:'12px 16px',fontSize:13,fontWeight:600,color:debt>0?'#DC2626':'#9CA3AF'}}>{debt>0?fmt(debt):'—'}</td>
@@ -156,12 +160,21 @@ export default function Students({ isBoss, onStudentClick }) {
                 <label style={labelStyle}>Telefon *</label>
                 <input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="+998901234567" style={inputStyle}/>
               </div>
-              <div>
-                <label style={labelStyle}>Guruh</label>
-                <select value={form.group_id} onChange={e=>setForm({...form,group_id:e.target.value})} style={{...inputStyle,background:'#fff'}}>
-                  <option value="">Guruh tanlang</option>
-                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </select>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                <div>
+                  <label style={labelStyle}>Guruh</label>
+                  <select value={form.group_id} onChange={e=>setForm({...form,group_id:e.target.value})} style={{...inputStyle,background:'#fff'}}>
+                    <option value="">Guruh tanlang</option>
+                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Ma'sul</label>
+                  <select value={form.agent_id} onChange={e=>setForm({...form,agent_id:e.target.value})} style={{...inputStyle,background:'#fff'}}>
+                    <option value="">Ma'sul tanlang</option>
+                    {agents.map(a => <option key={a.id} value={a.id}>{a.full_name}</option>)}
+                  </select>
+                </div>
               </div>
               <div style={{background:'#F9FAFB',borderRadius:8,padding:'12px 14px',border:'1px solid #E5E7EB'}}>
                 <div style={{fontSize:12,fontWeight:600,color:'#6B7280',marginBottom:4}}>KURS NARXI</div>

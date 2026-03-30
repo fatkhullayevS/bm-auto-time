@@ -4,14 +4,14 @@ import { checkDeletePassword } from '../lib/checkPassword'
 
 const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(n) + " so'm"
 
-export default function Groups({ isBoss, onStudentClick }) {
-  const [groups, setGroups] = useState([])
+export default function Agents({ isBoss, onStudentClick }) {
+  const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const [selectedGroup, setSelectedGroup] = useState(null)
-  const [groupStudents, setGroupStudents] = useState([])
-  const [form, setForm] = useState({ name:'', status:'active' })
+  const [selectedAgent, setSelectedAgent] = useState(null)
+  const [agentStudents, setAgentStudents] = useState([])
+  const [form, setForm] = useState({ full_name:'', phone:'' })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { loadData() }, [])
@@ -19,43 +19,44 @@ export default function Groups({ isBoss, onStudentClick }) {
   const loadData = async () => {
     setLoading(true)
     const { data } = await supabase
-      .from('groups')
-      .select('*, students(id, full_name, phone, course_price, agent_id, agents(full_name), payments(amount))')
+      .from('agents')
+      .select('*, students(id, full_name, phone, course_price, groups(name), payments(amount))')
       .order('created_at', { ascending: false })
-    setGroups(data || [])
+    setAgents(data || [])
     setLoading(false)
   }
 
-  const openGroup = async (group) => {
-    setSelectedGroup(group)
+  const openAgent = async (agent) => {
+    setSelectedAgent(agent)
     const { data } = await supabase
       .from('students')
-      .select('*, agents(full_name), payments(amount)')
-      .eq('group_id', group.id)
+      .select('*, groups(name), payments(amount)')
+      .eq('agent_id', agent.id)
       .order('created_at', { ascending: false })
-    setGroupStudents(data || [])
+    setAgentStudents(data || [])
   }
 
-  const openAdd = () => { setEditItem(null); setForm({ name:'', status:'active' }); setShowModal(true) }
-  const openEdit = (g) => { setEditItem(g); setForm({ name:g.name, status:g.status }); setShowModal(true) }
+  const openAdd = () => { setEditItem(null); setForm({ full_name:'', phone:'' }); setShowModal(true) }
+  const openEdit = (a) => { setEditItem(a); setForm({ full_name:a.full_name, phone:a.phone||'' }); setShowModal(true) }
 
   const save = async () => {
-    if (!form.name.trim()) return alert("Guruh nomini kiriting!")
+    if (!form.full_name.trim()) return alert("Ism kiriting!")
     setSaving(true)
-    if (editItem) await supabase.from('groups').update(form).eq('id', editItem.id)
-    else await supabase.from('groups').insert([form])
+    if (editItem) await supabase.from('agents').update(form).eq('id', editItem.id)
+    else await supabase.from('agents').insert([form])
     setShowModal(false)
     loadData()
+    if (selectedAgent?.id === editItem?.id) setSelectedAgent({...selectedAgent, ...form})
     setSaving(false)
   }
 
-  const deleteGroup = async (id) => {
+  const deleteAgent = async (id) => {
     const pass = window.prompt("O'chirish uchun maxsus parolni kiriting:")
     if (!pass) return
     const ok = await checkDeletePassword(pass)
     if (!ok) return alert("Parol noto'g'ri!")
-    await supabase.from('groups').delete().eq('id', id)
-    if (selectedGroup?.id === id) setSelectedGroup(null)
+    await supabase.from('agents').delete().eq('id', id)
+    if (selectedAgent?.id === id) setSelectedAgent(null)
     loadData()
   }
 
@@ -65,39 +66,37 @@ export default function Groups({ isBoss, onStudentClick }) {
   const inputStyle = { width:'100%', padding:'9px 12px', border:'1px solid #E5E7EB', borderRadius:8, fontSize:13, fontFamily:'inherit', outline:'none', boxSizing:'border-box' }
   const labelStyle = { display:'block', fontSize:12, fontWeight:600, color:'#6B7280', marginBottom:5 }
 
-  // Group detail view
-  if (selectedGroup) {
-    const totalExpected = groupStudents.reduce((s,st) => s+(st.course_price||0), 0)
-    const totalPaid = groupStudents.reduce((s,st) => s+getPaid(st), 0)
-    const totalDebt = groupStudents.reduce((s,st) => s+getDebt(st), 0)
+  // Agent detail view
+  if (selectedAgent) {
+    const totalExpected = agentStudents.reduce((s,st) => s+(st.course_price||0), 0)
+    const totalPaid = agentStudents.reduce((s,st) => s+getPaid(st), 0)
+    const totalDebt = agentStudents.reduce((s,st) => s+getDebt(st), 0)
 
     return (
       <div>
-        <button onClick={() => setSelectedGroup(null)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:20,fontFamily:'inherit',padding:0}}>
+        <button onClick={() => setSelectedAgent(null)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:20,fontFamily:'inherit',padding:0}}>
           ← Orqaga
         </button>
 
         <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:20,marginBottom:20,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
           <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:16,flexWrap:'wrap'}}>
-            <div style={{width:48,height:48,borderRadius:12,background:selectedGroup.status==='active'?'#DC2626':'#6B7280',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:20,flexShrink:0}}>
-              {selectedGroup.name[0]}
+            <div style={{width:48,height:48,borderRadius:12,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:20,flexShrink:0}}>
+              {selectedAgent.full_name[0]}
             </div>
             <div style={{flex:1}}>
-              <div style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:18}}>{selectedGroup.name}</div>
-              <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,background:selectedGroup.status==='active'?'#ECFDF5':'#F3F4F6',color:selectedGroup.status==='active'?'#059669':'#6B7280'}}>
-                {selectedGroup.status==='active'?'Aktiv':'Tugagan'}
-              </span>
+              <div style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:18}}>{selectedAgent.full_name}</div>
+              <div style={{fontSize:13,color:'#9CA3AF'}}>{selectedAgent.phone||"Telefon yo'q"}</div>
             </div>
             {isBoss && (
-              <button onClick={() => openEdit(selectedGroup)} style={{background:'#F3F4F6',border:'none',borderRadius:8,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+              <button onClick={() => openEdit(selectedAgent)} style={{background:'#F3F4F6',border:'none',borderRadius:8,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
                 ✏️ Tahrirlash
               </button>
             )}
           </div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10}}>
             {[
-              { label:"O'quvchilar", val: groupStudents.length + ' ta' },
-              { label:'Kutilgan', val: fmt(totalExpected) },
+              { label:"O'quvchilar", val: agentStudents.length + ' ta' },
+              { label:'Kutilgan', val: fmt(totalExpected), color:'#1A1D2E' },
               { label:'Tushgan', val: fmt(totalPaid), color:'#059669' },
               { label:'Qarz', val: fmt(totalDebt), color: totalDebt>0?'#DC2626':'#9CA3AF' },
             ].map((item,i) => (
@@ -113,9 +112,9 @@ export default function Groups({ isBoss, onStudentClick }) {
           <div style={{padding:'14px 18px',borderBottom:'1px solid #F3F4F6'}}>
             <span style={{fontWeight:700,fontSize:14}}>O'quvchilar</span>
           </div>
-          {groupStudents.length === 0 ? (
+          {agentStudents.length === 0 ? (
             <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>O'quvchilar yo'q</div>
-          ) : groupStudents.map(st => {
+          ) : agentStudents.map(st => {
             const paid = getPaid(st)
             const debt = getDebt(st)
             return (
@@ -123,7 +122,7 @@ export default function Groups({ isBoss, onStudentClick }) {
                 <div style={{width:32,height:32,borderRadius:8,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700,flexShrink:0}}>{st.full_name[0]}</div>
                 <div style={{flex:1,minWidth:120}}>
                   <div style={{fontSize:13,fontWeight:600}}>{st.full_name}</div>
-                  <div style={{fontSize:11,color:'#9CA3AF'}}>Ma'sul: {st.agents?.full_name||'—'} · {st.phone||''}</div>
+                  <div style={{fontSize:11,color:'#9CA3AF'}}>{st.groups?.name||'Guruhsiz'} · {st.phone||''}</div>
                 </div>
                 <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
                   <span style={{fontSize:13,fontWeight:600,color:'#059669'}}>{fmt(paid)}</span>
@@ -138,13 +137,13 @@ export default function Groups({ isBoss, onStudentClick }) {
     )
   }
 
-  // Groups list
+  // Agents list
   return (
     <div>
       <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
         {isBoss && (
           <button onClick={openAdd} style={{background:'#DC2626',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
-            + Guruh qo'shish
+            + Ma'sul qo'shish
           </button>
         )}
       </div>
@@ -152,10 +151,10 @@ export default function Groups({ isBoss, onStudentClick }) {
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16}}>
         {loading ? (
           <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>Yuklanmoqda...</div>
-        ) : groups.length === 0 ? (
-          <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>Guruhlar yo'q</div>
-        ) : groups.map(g => {
-          const students = g.students || []
+        ) : agents.length === 0 ? (
+          <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>Ma'sullar yo'q</div>
+        ) : agents.map(a => {
+          const students = a.students || []
           const totalPaid = students.reduce((s,st) => s+(st.payments?.reduce((ss,p)=>ss+Number(p.amount),0)||0), 0)
           const totalExpected = students.reduce((s,st) => s+(st.course_price||0), 0)
           const totalDebt = students.reduce((s,st) => {
@@ -163,21 +162,19 @@ export default function Groups({ isBoss, onStudentClick }) {
             return s + Math.max(0,(st.course_price||0)-paid)
           }, 0)
           return (
-            <div key={g.id} onClick={() => openGroup(g)} style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:20,boxShadow:'0 1px 3px rgba(0,0,0,.06)',cursor:'pointer',transition:'all .15s'}} onMouseOver={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.1)'} onMouseOut={e=>e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,.06)'}>
+            <div key={a.id} onClick={() => openAgent(a)} style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:20,boxShadow:'0 1px 3px rgba(0,0,0,.06)',cursor:'pointer',transition:'all .15s'}} onMouseOver={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.1)'} onMouseOut={e=>e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,.06)'}>
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
-                <div style={{width:42,height:42,borderRadius:10,background:g.status==='active'?'#DC2626':'#6B7280',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:16,flexShrink:0}}>
-                  {g.name[0]}
+                <div style={{width:42,height:42,borderRadius:10,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:16,flexShrink:0}}>
+                  {a.full_name[0]}
                 </div>
                 <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:15}}>{g.name}</div>
-                  <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,background:g.status==='active'?'#ECFDF5':'#F3F4F6',color:g.status==='active'?'#059669':'#6B7280'}}>
-                    {g.status==='active'?'Aktiv':'Tugagan'}
-                  </span>
+                  <div style={{fontWeight:700,fontSize:15}}>{a.full_name}</div>
+                  <div style={{fontSize:12,color:'#9CA3AF'}}>{a.phone||"Telefon yo'q"}</div>
                 </div>
                 {isBoss && (
                   <div style={{display:'flex',gap:4}} onClick={e=>e.stopPropagation()}>
-                    <button onClick={() => openEdit(g)} style={{background:'#F3F4F6',border:'none',borderRadius:6,padding:'5px 8px',fontSize:12,cursor:'pointer'}}>✏️</button>
-                    <button onClick={() => deleteGroup(g.id)} style={{background:'#FEF2F2',border:'none',borderRadius:6,padding:'5px 8px',fontSize:12,cursor:'pointer',color:'#DC2626'}}>×</button>
+                    <button onClick={() => openEdit(a)} style={{background:'#F3F4F6',border:'none',borderRadius:6,padding:'5px 8px',fontSize:12,cursor:'pointer'}}>✏️</button>
+                    <button onClick={() => deleteAgent(a.id)} style={{background:'#FEF2F2',border:'none',borderRadius:6,padding:'5px 8px',fontSize:12,cursor:'pointer',color:'#DC2626'}}>×</button>
                   </div>
                 )}
               </div>
@@ -201,21 +198,18 @@ export default function Groups({ isBoss, onStudentClick }) {
 
       {showModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setShowModal(false)}>
-          <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,.15)'}}>
+          <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:420,boxShadow:'0 20px 60px rgba(0,0,0,.15)'}}>
             <h2 style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:18,marginBottom:20}}>
-              {editItem ? 'Guruhni tahrirlash' : "Guruh qo'shish"}
+              {editItem ? "Ma'sulni tahrirlash" : "Ma'sul qo'shish"}
             </h2>
             <div style={{display:'flex',flexDirection:'column',gap:14,marginBottom:20}}>
               <div>
-                <label style={labelStyle}>Guruh nomi *</label>
-                <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="73-guruh" style={inputStyle}/>
+                <label style={labelStyle}>Ism Familiya *</label>
+                <input value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})} placeholder="Rahimov Sardor" style={inputStyle}/>
               </div>
               <div>
-                <label style={labelStyle}>Holat</label>
-                <select value={form.status} onChange={e=>setForm({...form,status:e.target.value})} style={{...inputStyle,background:'#fff'}}>
-                  <option value="active">Aktiv</option>
-                  <option value="finished">Tugagan</option>
-                </select>
+                <label style={labelStyle}>Telefon</label>
+                <input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="+998901234567" style={inputStyle}/>
               </div>
             </div>
             <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
