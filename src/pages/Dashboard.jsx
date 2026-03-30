@@ -3,12 +3,13 @@ import { supabase } from '../lib/supabase'
 import Layout from '../components/Layout'
 import DashboardHome from './DashboardHome'
 import Students from './Students'
-import Teachers from './Teachers'
+import Agents from './Agents'
 import Payments from './Payments'
 import Groups from './Groups'
 import StudentDetail from './StudentDetail'
 import Search from './Search'
 import Reports from './Reports'
+import AgentReports from './AgentReports'
 import Archive from './Archive'
 import Admins from './Admins'
 
@@ -36,11 +37,12 @@ export default function Dashboard({ session }) {
     switch(currentPage) {
       case 'dashboard': return <DashboardHome isBoss={isBoss} />
       case 'students': return <Students isBoss={isBoss} onStudentClick={(id) => openStudent(id, 'students')} />
-      case 'teachers': return <Teachers isBoss={isBoss} />
+      case 'agents': return <Agents isBoss={isBoss} onStudentClick={(id) => openStudent(id, 'agents')} />
       case 'payments': return <Payments isBoss={isBoss} session={session} openModal={openPayment} setOpenModal={setOpenPayment} />
-      case 'groups': return <Groups isBoss={isBoss} />
+      case 'groups': return <Groups isBoss={isBoss} onStudentClick={(id) => openStudent(id, 'groups')} />
       case 'search': return <Search onStudentClick={(id) => openStudent(id, 'search')} />
       case 'reports': return <Reports isBoss={isBoss} />
+      case 'agent-reports': return <AgentReports isBoss={isBoss} />
       case 'archive': return <Archive />
       case 'admins': return <Admins />
       case 'student-detail': return <StudentDetail studentId={selectedStudentId} onBack={() => setCurrentPage(prevPage)} isBoss={isBoss} />
