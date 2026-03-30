@@ -32,59 +32,48 @@ export default function AgentReports({ isBoss }) {
   const loadAgentData = async (agent) => {
     setLoading(true)
 
-    const { data: students } = await supabase
-      .from('students')
-      .select('id, full_name, course_price, payments(id, amount, method, paid_at, cashier_id, profiles(full_name))')
-      .eq('agent_id', agent.id)
-
+    // Faqat agent_payments_log dan o'qiymiz
     const { data: logs } = await supabase
       .from('agent_payments_log')
       .select('*')
       .eq('agent_id', agent.id)
       .order('paid_at', { ascending: false })
 
-    const filterByDate = (date) => {
-      const d = new Date(date)
-      if (dateFrom && d < new Date(dateFrom)) return false
-      if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false
+    // Faol o'quvchilar — faqat qarz hisoblash uchun
+    const { data: students } = await supabase
+      .from('students')
+      .select('id, full_name, course_price, payments(amount)')
+      .eq('agent_id', agent.id)
+
+    // Date va method filter
+    const filtered = (logs || []).filter(p => {
+      if (dateFrom && new Date(p.paid_at) < new Date(dateFrom)) return false
+      if (dateTo && new Date(p.paid_at) > new Date(dateTo + 'T23:59:59')) return false
+      if (filterMethod && p.method !== filterMethod) return false
       return true
-    }
+    })
 
-    let allPayments = []
-    let totalExpected = 0
+    // Qarz hisoblash — faqat faol o'quvchilardan
     let debtStudents = []
-
+    let totalExpected = 0
     students?.forEach(st => {
       const paid = st.payments?.reduce((s,p) => s+Number(p.amount), 0) || 0
       const debt = Math.max(0, (st.course_price||0) - paid)
       totalExpected += st.course_price || 0
       if (debt > 0) debtStudents.push({ ...st, paid, debt })
-      st.payments?.forEach(p => {
-        if (filterByDate(p.paid_at) && (!filterMethod || p.method === filterMethod)) {
-          allPayments.push({ ...p, student_name: st.full_name, source: 'active' })
-        }
-      })
     })
 
-    logs?.forEach(log => {
-      if (filterByDate(log.paid_at) && (!filterMethod || log.method === filterMethod)) {
-        allPayments.push({ ...log, source: 'archived' })
-      }
-    })
-
-    allPayments.sort((a,b) => new Date(b.paid_at) - new Date(a.paid_at))
-
-    const totalPaid = allPayments.reduce((s,p) => s+Number(p.amount), 0)
-    const totalCash = allPayments.filter(p=>p.method==='cash').reduce((s,p) => s+Number(p.amount), 0)
-    const totalCard = allPayments.filter(p=>p.method==='card').reduce((s,p) => s+Number(p.amount), 0)
+    const totalPaid = filtered.reduce((s,p) => s+Number(p.amount), 0)
+    const totalCash = filtered.filter(p=>p.method==='cash').reduce((s,p) => s+Number(p.amount), 0)
+    const totalCard = filtered.filter(p=>p.method==='card').reduce((s,p) => s+Number(p.amount), 0)
     const totalDebt = debtStudents.reduce((s,st) => s+st.debt, 0)
 
-    setAgentData({ students, allPayments, totalExpected, totalPaid, totalCash, totalCard, totalDebt, debtStudents, logs })
+    setAgentData({ students, allPayments: filtered, totalExpected, totalPaid, totalCash, totalCard, totalDebt, debtStudents })
     setLoading(false)
   }
 
-  const openDelete = (item, type) => {
-    setDeleteItem({ ...item, type })
+  const openDelete = (item) => {
+    setDeleteItem(item)
     setDeletePass('')
     setShowDeleteModal(true)
   }
@@ -93,8 +82,9 @@ export default function AgentReports({ isBoss }) {
     const ok = await checkDeletePassword(deletePass)
     if (!ok) return alert("Parol noto'g'ri!")
     setDeleting(true)
-    if (deleteItem.type === 'payment') {
-      await supabase.from('payments').delete().eq('id', deleteItem.id)
+    // payment_id bo'lsa payments dan o'chiramiz, aks holda faqat logdan
+    if (deleteItem.payment_id) {
+      await supabase.from('payments').delete().eq('id', deleteItem.payment_id)
     } else {
       await supabase.from('agent_payments_log').delete().eq('id', deleteItem.id)
     }
@@ -103,7 +93,6 @@ export default function AgentReports({ isBoss }) {
     setDeleting(false)
   }
 
-  // Agents list
   if (!selectedAgent) {
     return (
       <div>
@@ -126,14 +115,12 @@ export default function AgentReports({ isBoss }) {
     )
   }
 
-  // Agent detail
   return (
     <div>
       <button onClick={() => { setSelectedAgent(null); setAgentData(null); setDateFrom(''); setDateTo(''); setFilterMethod('') }} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:20,fontFamily:'inherit',padding:0}}>
         ← Orqaga
       </button>
 
-      {/* Agent info */}
       <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:20,marginBottom:16,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
         <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:16,flexWrap:'wrap'}}>
           <div style={{width:48,height:48,borderRadius:12,background:'#DC2626',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:20,flexShrink:0}}>{selectedAgent.full_name[0]}</div>
@@ -142,8 +129,6 @@ export default function AgentReports({ isBoss }) {
             <div style={{fontSize:13,color:'#9CA3AF'}}>{selectedAgent.phone||"Telefon yo'q"}</div>
           </div>
         </div>
-
-        {/* Filters */}
         <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
           <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={{padding:'8px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:13,fontFamily:'inherit'}}/>
           <span style={{color:'#9CA3AF',fontSize:13}}>dan</span>
@@ -160,7 +145,6 @@ export default function AgentReports({ isBoss }) {
         </div>
       </div>
 
-      {/* Stats */}
       {agentData && (
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12,marginBottom:16}}>
           {[
@@ -179,7 +163,6 @@ export default function AgentReports({ isBoss }) {
         </div>
       )}
 
-      {/* Debt detail */}
       {agentData?.debtStudents?.length > 0 && (
         <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.06)',marginBottom:16}}>
           <div onClick={() => setShowDebtDetail(!showDebtDetail)} style={{padding:'14px 18px',borderBottom:showDebtDetail?'1px solid #F3F4F6':'none',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
@@ -198,7 +181,6 @@ export default function AgentReports({ isBoss }) {
         </div>
       )}
 
-      {/* Payments list */}
       <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
         <div style={{padding:'14px 18px',borderBottom:'1px solid #F3F4F6'}}>
           <span style={{fontWeight:700,fontSize:14}}>To'lovlar tarixi ({agentData?.allPayments?.length||0} ta)</span>
@@ -218,9 +200,9 @@ export default function AgentReports({ isBoss }) {
               <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,background:p.method==='cash'?'#ECFDF5':'#EEF2FF',color:p.method==='cash'?'#059669':'#4338CA'}}>
                 {p.method==='cash'?'Naqd':'Karta'}
               </span>
-              {p.source === 'archived' && <span style={{padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:600,background:'#F3F4F6',color:'#6B7280'}}>Arxiv</span>}
+              {!p.payment_id && <span style={{padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:600,background:'#F3F4F6',color:'#6B7280'}}>Arxiv</span>}
               {isBoss && (
-                <button onClick={() => openDelete(p, p.source==='archived'?'log':'payment')} style={{background:'#FEF2F2',border:'none',borderRadius:6,padding:'4px 9px',fontSize:11,cursor:'pointer',color:'#DC2626',fontFamily:'inherit'}}>
+                <button onClick={() => openDelete(p)} style={{background:'#FEF2F2',border:'none',borderRadius:6,padding:'4px 9px',fontSize:11,cursor:'pointer',color:'#DC2626',fontFamily:'inherit'}}>
                   O'chirish
                 </button>
               )}
@@ -229,7 +211,6 @@ export default function AgentReports({ isBoss }) {
         ))}
       </div>
 
-      {/* Delete modal */}
       {showDeleteModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:16,padding:28,width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,.15)'}}>
