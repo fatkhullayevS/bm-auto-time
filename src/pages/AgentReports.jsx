@@ -10,9 +10,9 @@ export default function AgentReports({ isBoss }) {
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [agentData, setAgentData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [period, setPeriod] = useState('all')
-  const [locked, setLocked] = useState(true)
-  const [pass, setPass] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [filterMethod, setFilterMethod] = useState('')
   const [showDebtDetail, setShowDebtDetail] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteItem, setDeleteItem] = useState(null)
@@ -20,7 +20,7 @@ export default function AgentReports({ isBoss }) {
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { loadAgents() }, [])
-  useEffect(() => { if (selectedAgent) loadAgentData(selectedAgent) }, [selectedAgent, period])
+  useEffect(() => { if (selectedAgent) loadAgentData(selectedAgent) }, [selectedAgent, dateFrom, dateTo, filterMethod])
 
   const loadAgents = async () => {
     setLoading(true)
@@ -32,29 +32,24 @@ export default function AgentReports({ isBoss }) {
   const loadAgentData = async (agent) => {
     setLoading(true)
 
-    // Faol o'quvchilar va ularning to'lovlari
     const { data: students } = await supabase
       .from('students')
       .select('id, full_name, course_price, payments(id, amount, method, paid_at, cashier_id, profiles(full_name))')
       .eq('agent_id', agent.id)
 
-    // Arxivlangan to'lovlar logi
     const { data: logs } = await supabase
       .from('agent_payments_log')
       .select('*')
       .eq('agent_id', agent.id)
       .order('paid_at', { ascending: false })
 
-    // Period filtri
-    const now = new Date()
-    const filterByPeriod = (date) => {
+    const filterByDate = (date) => {
       const d = new Date(date)
-      if (period === 'week') return (now - d) <= 7 * 24 * 60 * 60 * 1000
-      if (period === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+      if (dateFrom && d < new Date(dateFrom)) return false
+      if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false
       return true
     }
 
-    // Faol o'quvchilardan to'lovlar
     let allPayments = []
     let totalExpected = 0
     let debtStudents = []
@@ -65,15 +60,14 @@ export default function AgentReports({ isBoss }) {
       totalExpected += st.course_price || 0
       if (debt > 0) debtStudents.push({ ...st, paid, debt })
       st.payments?.forEach(p => {
-        if (filterByPeriod(p.paid_at)) {
+        if (filterByDate(p.paid_at) && (!filterMethod || p.method === filterMethod)) {
           allPayments.push({ ...p, student_name: st.full_name, source: 'active' })
         }
       })
     })
 
-    // Arxivlangan to'lovlar
     logs?.forEach(log => {
-      if (filterByPeriod(log.paid_at)) {
+      if (filterByDate(log.paid_at) && (!filterMethod || log.method === filterMethod)) {
         allPayments.push({ ...log, source: 'archived' })
       }
     })
@@ -81,16 +75,12 @@ export default function AgentReports({ isBoss }) {
     allPayments.sort((a,b) => new Date(b.paid_at) - new Date(a.paid_at))
 
     const totalPaid = allPayments.reduce((s,p) => s+Number(p.amount), 0)
+    const totalCash = allPayments.filter(p=>p.method==='cash').reduce((s,p) => s+Number(p.amount), 0)
+    const totalCard = allPayments.filter(p=>p.method==='card').reduce((s,p) => s+Number(p.amount), 0)
     const totalDebt = debtStudents.reduce((s,st) => s+st.debt, 0)
 
-    setAgentData({ students, allPayments, totalExpected, totalPaid, totalDebt, debtStudents, logs })
+    setAgentData({ students, allPayments, totalExpected, totalPaid, totalCash, totalCard, totalDebt, debtStudents, logs })
     setLoading(false)
-  }
-
-  const unlock = async () => {
-    const { data } = await supabase.from('settings').select('value').eq('key','view_password').single()
-    if (data?.value === pass) { setLocked(false); setPass('') }
-    else alert("Parol noto'g'ri!")
   }
 
   const openDelete = (item, type) => {
@@ -105,7 +95,7 @@ export default function AgentReports({ isBoss }) {
     setDeleting(true)
     if (deleteItem.type === 'payment') {
       await supabase.from('payments').delete().eq('id', deleteItem.id)
-    } else if (deleteItem.type === 'log') {
+    } else {
       await supabase.from('agent_payments_log').delete().eq('id', deleteItem.id)
     }
     setShowDeleteModal(false)
@@ -113,25 +103,10 @@ export default function AgentReports({ isBoss }) {
     setDeleting(false)
   }
 
-  const hide = (val) => locked ? '••••••' : val
-
   // Agents list
   if (!selectedAgent) {
     return (
       <div>
-        {locked && (
-          <div style={{background:'#1A1D2E',borderRadius:12,padding:'16px 20px',display:'flex',alignItems:'center',gap:16,marginBottom:20,flexWrap:'wrap'}}>
-            <div style={{flex:1,minWidth:160}}>
-              <div style={{color:'#fff',fontWeight:600,fontSize:14,marginBottom:2}}>Summalar shifrlangan</div>
-              <div style={{color:'#6B7280',fontSize:12}}>Ko'rish uchun maxsus parol kiriting</div>
-            </div>
-            <div style={{display:'flex',gap:8}}>
-              <input type="password" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&unlock()} placeholder="Parol..." style={{padding:'8px 12px',borderRadius:8,border:'1px solid rgba(255,255,255,.15)',background:'rgba(255,255,255,.08)',color:'#fff',fontSize:13,outline:'none',fontFamily:'inherit',width:150}}/>
-              <button onClick={unlock} style={{background:'#DC2626',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Ochish</button>
-            </div>
-          </div>
-        )}
-
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
           {loading ? (
             <div style={{padding:40,textAlign:'center',color:'#9CA3AF'}}>Yuklanmoqda...</div>
@@ -154,22 +129,9 @@ export default function AgentReports({ isBoss }) {
   // Agent detail
   return (
     <div>
-      <button onClick={() => { setSelectedAgent(null); setAgentData(null) }} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:20,fontFamily:'inherit',padding:0}}>
+      <button onClick={() => { setSelectedAgent(null); setAgentData(null); setDateFrom(''); setDateTo(''); setFilterMethod('') }} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'#6B7280',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:20,fontFamily:'inherit',padding:0}}>
         ← Orqaga
       </button>
-
-      {locked && (
-        <div style={{background:'#1A1D2E',borderRadius:12,padding:'16px 20px',display:'flex',alignItems:'center',gap:16,marginBottom:20,flexWrap:'wrap'}}>
-          <div style={{flex:1,minWidth:160}}>
-            <div style={{color:'#fff',fontWeight:600,fontSize:14,marginBottom:2}}>Summalar shifrlangan</div>
-            <div style={{color:'#6B7280',fontSize:12}}>Ko'rish uchun maxsus parol kiriting</div>
-          </div>
-          <div style={{display:'flex',gap:8}}>
-            <input type="password" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&unlock()} placeholder="Parol..." style={{padding:'8px 12px',borderRadius:8,border:'1px solid rgba(255,255,255,.15)',background:'rgba(255,255,255,.08)',color:'#fff',fontSize:13,outline:'none',fontFamily:'inherit',width:150}}/>
-            <button onClick={unlock} style={{background:'#DC2626',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Ochish</button>
-          </div>
-        </div>
-      )}
 
       {/* Agent info */}
       <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:20,marginBottom:16,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
@@ -179,32 +141,43 @@ export default function AgentReports({ isBoss }) {
             <div style={{fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:18}}>{selectedAgent.full_name}</div>
             <div style={{fontSize:13,color:'#9CA3AF'}}>{selectedAgent.phone||"Telefon yo'q"}</div>
           </div>
-          {/* Period filter */}
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {[{val:'all',label:'Barchasi'},{val:'month',label:'Bu oy'},{val:'week',label:'Bu hafta'}].map(p => (
-              <button key={p.val} onClick={() => setPeriod(p.val)} style={{padding:'6px 12px',borderRadius:7,border:`1.5px solid ${period===p.val?'#DC2626':'#E5E7EB'}`,background:period===p.val?'#FEF2F2':'#fff',color:period===p.val?'#DC2626':'#6B7280',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
-                {p.label}
-              </button>
-            ))}
-          </div>
         </div>
 
-        {agentData && (
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10}}>
-            {[
-              { label:"O'quvchilar", val: (agentData.students?.length||0) + ' ta' },
-              { label:'Kutilgan', val: hide(fmt(agentData.totalExpected)), color: locked?'#9CA3AF':'#1A1D2E' },
-              { label:'Tushgan', val: hide(fmt(agentData.totalPaid)), color: locked?'#9CA3AF':'#059669' },
-              { label:'Qarz', val: hide(fmt(agentData.totalDebt)), color: locked?'#9CA3AF':agentData.totalDebt>0?'#DC2626':'#9CA3AF' },
-            ].map((item,i) => (
-              <div key={i} style={{background:'#F9FAFB',borderRadius:8,padding:'10px 12px'}}>
-                <div style={{fontSize:10,color:'#9CA3AF',marginBottom:3,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>{item.label}</div>
-                <div style={{fontSize:15,fontWeight:700,color:item.color||'#1A1D2E'}}>{item.val}</div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Filters */}
+        <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={{padding:'8px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:13,fontFamily:'inherit'}}/>
+          <span style={{color:'#9CA3AF',fontSize:13}}>dan</span>
+          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{padding:'8px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:13,fontFamily:'inherit'}}/>
+          <span style={{color:'#9CA3AF',fontSize:13}}>gacha</span>
+          <select value={filterMethod} onChange={e=>setFilterMethod(e.target.value)} style={{padding:'8px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:13,fontFamily:'inherit',background:'#fff'}}>
+            <option value="">Barcha usullar</option>
+            <option value="cash">Naqd</option>
+            <option value="card">Karta</option>
+          </select>
+          {(dateFrom||dateTo||filterMethod) && (
+            <button onClick={()=>{setDateFrom('');setDateTo('');setFilterMethod('')}} style={{padding:'8px 12px',border:'1px solid #E5E7EB',borderRadius:8,fontSize:12,background:'#fff',cursor:'pointer',fontFamily:'inherit',color:'#6B7280'}}>Tozalash ×</button>
+          )}
+        </div>
       </div>
+
+      {/* Stats */}
+      {agentData && (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12,marginBottom:16}}>
+          {[
+            { label:"O'quvchilar", val: (agentData.students?.length||0) + ' ta' },
+            { label:'Kutilgan', val: fmt(agentData.totalExpected) },
+            { label:'Tushgan', val: fmt(agentData.totalPaid), color:'#059669' },
+            { label:'Naqd', val: fmt(agentData.totalCash), color:'#059669' },
+            { label:'Karta', val: fmt(agentData.totalCard), color:'#4338CA' },
+            { label:'Umumiy qarz', val: fmt(agentData.totalDebt), color: agentData.totalDebt>0?'#DC2626':'#9CA3AF' },
+          ].map((item,i) => (
+            <div key={i} style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',padding:'14px 16px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+              <div style={{fontSize:10,color:'#9CA3AF',marginBottom:4,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>{item.label}</div>
+              <div style={{fontSize:16,fontWeight:800,fontFamily:'Nunito,sans-serif',color:item.color||'#1A1D2E'}}>{item.val}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Debt detail */}
       {agentData?.debtStudents?.length > 0 && (
@@ -217,9 +190,9 @@ export default function AgentReports({ isBoss }) {
             <div key={i} style={{padding:'12px 18px',borderBottom:'1px solid #F9FAFB',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
               <div>
                 <div style={{fontSize:13,fontWeight:600}}>{st.full_name}</div>
-                <div style={{fontSize:11,color:'#9CA3AF'}}>To'langan: {hide(fmt(st.paid))}</div>
+                <div style={{fontSize:11,color:'#9CA3AF'}}>To'langan: {fmt(st.paid)}</div>
               </div>
-              <span style={{padding:'3px 10px',borderRadius:5,fontSize:12,fontWeight:600,background:'#FEF2F2',color:'#DC2626'}}>{hide(fmt(st.debt))}</span>
+              <span style={{padding:'3px 10px',borderRadius:5,fontSize:12,fontWeight:600,background:'#FEF2F2',color:'#DC2626'}}>{fmt(st.debt)}</span>
             </div>
           ))}
         </div>
@@ -228,18 +201,20 @@ export default function AgentReports({ isBoss }) {
       {/* Payments list */}
       <div style={{background:'#fff',borderRadius:12,border:'1px solid #E5E7EB',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
         <div style={{padding:'14px 18px',borderBottom:'1px solid #F3F4F6'}}>
-          <span style={{fontWeight:700,fontSize:14}}>To'lovlar tarixi</span>
+          <span style={{fontWeight:700,fontSize:14}}>To'lovlar tarixi ({agentData?.allPayments?.length||0} ta)</span>
         </div>
-        {!agentData || agentData.allPayments.length === 0 ? (
+        {loading ? (
+          <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>Yuklanmoqda...</div>
+        ) : !agentData || agentData.allPayments.length === 0 ? (
           <div style={{padding:40,textAlign:'center',color:'#9CA3AF',fontSize:13}}>To'lovlar yo'q</div>
         ) : agentData.allPayments.map((p,i) => (
           <div key={i} style={{padding:'14px 18px',borderBottom:'1px solid #F9FAFB',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}} onMouseOver={e=>e.currentTarget.style.background='#FAFBFF'} onMouseOut={e=>e.currentTarget.style.background=''}>
             <div style={{flex:1,minWidth:120}}>
-              <div style={{fontSize:13,fontWeight:600}}>{p.student_name||p.student_name||'—'}</div>
+              <div style={{fontSize:13,fontWeight:600}}>{p.student_name||'—'}</div>
               <div style={{fontSize:11,color:'#9CA3AF'}}>{fmtDate(p.paid_at)}</div>
             </div>
             <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-              <span style={{fontSize:14,fontWeight:700,color:locked?'#9CA3AF':'#059669'}}>{hide(fmt(p.amount))}</span>
+              <span style={{fontSize:14,fontWeight:700,color:'#059669'}}>{fmt(p.amount)}</span>
               <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,background:p.method==='cash'?'#ECFDF5':'#EEF2FF',color:p.method==='cash'?'#059669':'#4338CA'}}>
                 {p.method==='cash'?'Naqd':'Karta'}
               </span>
