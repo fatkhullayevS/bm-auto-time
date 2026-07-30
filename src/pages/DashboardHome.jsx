@@ -12,7 +12,7 @@ const Card = ({ label, value, sub, color }) => (
 )
 
 export default function DashboardHome({ isBoss }) {
-  const [stats, setStats] = useState({ students:0, groups:0, teachers:0, totalPaid:0, totalDebt:0 })
+  const [stats, setStats] = useState({ students:0, groups:0, teachers:0, totalPaid:0, totalDebt:0, cashBalance:0 })
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [locked, setLocked] = useState(true)
@@ -22,15 +22,18 @@ export default function DashboardHome({ isBoss }) {
 
   const loadStats = async () => {
     setLoading(true)
-    const [{ count: students }, { count: groups }, { count: teachers }, { data: pays }, { data: allStudents }] = await Promise.all([
+    const [{ count: students }, { count: groups }, { count: teachers }, { data: pays }, { data: allStudents }, { data: allPays }, { data: allExps }] = await Promise.all([
       supabase.from('students').select('*', { count: 'exact', head: true }),
       supabase.from('groups').select('*', { count: 'exact', head: true }).eq('status','active'),
       supabase.from('teachers').select('*', { count: 'exact', head: true }),
       supabase.from('payments').select('amount, paid_at, method, students(full_name, groups(name))').order('paid_at', { ascending: false }).limit(8),
-      supabase.from('students').select('course_price, payments(amount)')
+      supabase.from('students').select('course_price, payments(amount)'),
+      supabase.from('payments').select('amount'),
+      supabase.from('expenses').select('amount'),
     ])
 
-    const totalPaid = pays?.reduce((s,p) => s+Number(p.amount), 0) || 0
+    const totalPaid = allPays?.reduce((s,p) => s+Number(p.amount), 0) || 0
+    const totalExp = allExps?.reduce((s,e) => s+Number(e.amount), 0) || 0
 
     let debt = 0
     allStudents?.forEach(st => {
@@ -39,7 +42,14 @@ export default function DashboardHome({ isBoss }) {
       if (price > paid) debt += (price - paid)
     })
 
-    setStats({ students: students||0, groups: groups||0, teachers: teachers||0, totalPaid, totalDebt: debt })
+    setStats({
+      students: students||0,
+      groups: groups||0,
+      teachers: teachers||0,
+      totalPaid,
+      totalDebt: debt,
+      cashBalance: totalPaid - totalExp,
+    })
     setPayments(pays || [])
     setLoading(false)
   }
@@ -74,8 +84,14 @@ export default function DashboardHome({ isBoss }) {
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:16,marginBottom:24}}>
         <Card label="Jami o'quvchilar" value={stats.students} sub="Barcha guruhlar" />
         <Card label="Aktiv guruhlar" value={stats.groups} sub={`${stats.teachers} o'qituvchi`} />
-        <Card label="Bu oy tushum" value={locked ? '••••••' : fmt(stats.totalPaid)} sub="Barcha to'lovlar" color={locked?'#9CA3AF':'#059669'} />
+        <Card label="Jami tushum" value={locked ? '••••••' : fmt(stats.totalPaid)} sub="Barcha to'lovlar" color={locked?'#9CA3AF':'#059669'} />
         <Card label="Umumiy qarz" value={locked ? '••••••' : fmt(stats.totalDebt)} sub="To'lanmagan" color={locked?'#9CA3AF':stats.totalDebt>0?'#DC2626':'#9CA3AF'} />
+        <Card
+          label="Kassa balansi"
+          value={locked ? '••••••' : fmt(stats.cashBalance)}
+          sub="Tushum − rasxot"
+          color={locked ? '#9CA3AF' : stats.cashBalance >= 0 ? '#059669' : '#DC2626'}
+        />
       </div>
 
       {/* Recent payments */}

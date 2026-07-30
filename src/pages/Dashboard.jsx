@@ -12,6 +12,7 @@ import Reports from './Reports'
 import AgentReports from './AgentReports'
 import Archive from './Archive'
 import Admins from './Admins'
+import Expenses from './Expenses'
 
 export default function Dashboard({ session }) {
   const [currentPage, setCurrentPage] = useState('dashboard')
@@ -26,6 +27,8 @@ export default function Dashboard({ session }) {
   }, [session])
 
   const isBoss = profile?.role === 'boss'
+  const canManageAgents = ['boss', 'kassir', 'cashier'].includes(profile?.role)
+  const canWriteExpenses = ['boss', 'kassir', 'cashier'].includes(profile?.role)
 
   const openStudent = (id, from) => {
     setSelectedStudentId(id)
@@ -37,8 +40,9 @@ export default function Dashboard({ session }) {
     switch(currentPage) {
       case 'dashboard': return <DashboardHome isBoss={isBoss} />
       case 'students': return <Students isBoss={isBoss} onStudentClick={(id) => openStudent(id, 'students')} />
-      case 'agents': return <Agents isBoss={isBoss} onStudentClick={(id) => openStudent(id, 'agents')} />
+      case 'agents': return <Agents isBoss={isBoss} canManageAgents={canManageAgents} onStudentClick={(id) => openStudent(id, 'agents')} />
       case 'payments': return <Payments isBoss={isBoss} session={session} openModal={openPayment} setOpenModal={setOpenPayment} />
+      case 'expenses': return <Expenses session={session} canWrite={canWriteExpenses} />
       case 'groups': return <Groups isBoss={isBoss} onStudentClick={(id) => openStudent(id, 'groups')} />
       case 'search': return <Search onStudentClick={(id) => openStudent(id, 'search')} />
       case 'reports': return <Reports isBoss={isBoss} />

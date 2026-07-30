@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { checkDeletePassword } from '../lib/checkPassword'
+import { notifyTelegram } from '../lib/notifyTelegram'
+import { formatMoneyInput, parseMoneyInput } from '../lib/moneyMask'
 
 const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(n) + " so'm"
+const emptyForm = { full_name:'', phone:'', group_id:'', agent_id:'', notes:'', payment_amount:'', payment_method:'cash' }
 
 export default function Students({ isBoss, onStudentClick }) {
   const [students, setStudents] = useState([])
@@ -13,7 +16,7 @@ export default function Students({ isBoss, onStudentClick }) {
   const [filterGroup, setFilterGroup] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [defaultPrice, setDefaultPrice] = useState(4060000)
-  const [form, setForm] = useState({ full_name:'', phone:'', group_id:'', agent_id:'', notes:'' })
+  const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { loadData() }, [])
@@ -46,21 +49,63 @@ export default function Students({ isBoss, onStudentClick }) {
   const saveStudent = async () => {
     if (!form.full_name.trim()) return alert("Ism kiriting!")
     if (!form.phone.trim()) return alert("Telefon kiriting!")
+
+    const payAmount = parseMoneyInput(form.payment_amount)
+    if (form.payment_amount && payAmount <= 0) return alert("To'lov summasi noto'g'ri!")
+
     setSaving(true)
-    const { error } = await supabase.from('students').insert([{
-      full_name: form.full_name,
-      phone: form.phone,
+    const { data: created, error } = await supabase.from('students').insert([{
+      full_name: form.full_name.trim(),
+      phone: form.phone.trim(),
       group_id: form.group_id || null,
       agent_id: form.agent_id || null,
       notes: form.notes,
       course_price: defaultPrice
-    }])
-    if (error) alert('Xato: ' + error.message)
-    else {
-      setShowModal(false)
-      setForm({ full_name:'', phone:'', group_id:'', agent_id:'', notes:'' })
-      loadData()
+    }]).select('id').single()
+
+    if (error) {
+      alert('Xato: ' + error.message)
+      setSaving(false)
+      return
     }
+
+    const groupName = groups.find(g => g.id === form.group_id)?.name || ''
+    const agentName = agents.find(a => a.id === form.agent_id)?.full_name || ''
+
+    notifyTelegram('new_student', {
+      student_name: form.full_name.trim(),
+      group_name: groupName,
+      agent_name: agentName,
+      course_price: defaultPrice,
+    })
+
+    // Ixtiyoriy birinchi to'lov
+    if (payAmount > 0 && created?.id) {
+      const { data: { session } } = await supabase.auth.getSession()
+      const { error: payErr } = await supabase.from('payments').insert([{
+        student_id: created.id,
+        amount: payAmount,
+        method: form.payment_method || 'cash',
+        notes: "O'quvchi qo'shilganda kiritilgan",
+        cashier_id: session?.user?.id || null,
+        paid_at: new Date().toISOString(),
+      }])
+      if (payErr) {
+        alert("O'quvchi saqlandi, lekin to'lov xatosi: " + payErr.message)
+      } else {
+        notifyTelegram('payment', {
+          student_name: form.full_name.trim(),
+          group_name: groupName,
+          agent_name: agentName,
+          paid_amount: payAmount,
+          remaining_debt: Math.max(0, defaultPrice - payAmount),
+        })
+      }
+    }
+
+    setShowModal(false)
+    setForm(emptyForm)
+    loadData()
     setSaving(false)
   }
 
@@ -89,7 +134,7 @@ export default function Students({ isBoss, onStudentClick }) {
           <option value="debt">Qarz bor</option>
           <option value="paid">To'liq to'lagan</option>
         </select>
-        <button onClick={() => setShowModal(true)} style={{marginLeft:'auto',background:'#DC2626',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+        <button onClick={() => { setForm(emptyForm); setShowModal(true) }} style={{marginLeft:'auto',background:'#DC2626',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
           + O'quvchi qo'shish
         </button>
       </div>
@@ -181,13 +226,58 @@ export default function Students({ isBoss, onStudentClick }) {
                 <div style={{fontSize:18,fontWeight:800,color:'#1A1D2E'}}>{fmt(defaultPrice)}</div>
                 <div style={{fontSize:11,color:'#9CA3AF',marginTop:2}}>Barcha o'quvchilar uchun bir xil narx</div>
               </div>
+
+              <div style={{background:'#FEF2F2',borderRadius:10,padding:14,border:'1px solid #FECACA'}}>
+                <div style={{fontSize:13,fontWeight:700,color:'#991B1B',marginBottom:4}}>Birinchi to'lov (ixtiyoriy)</div>
+                <div style={{fontSize:12,color:'#B91C1C',marginBottom:12}}>
+                  Majburiy emas — bo'sh qoldirsangiz, o'quvchi faqat qarz bilan saqlanadi
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                  <div>
+                    <label style={labelStyle}>Summa (so'm)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={form.payment_amount}
+                      onChange={e=>setForm({...form,payment_amount:formatMoneyInput(e.target.value)})}
+                      placeholder="Masalan: 1.000.000"
+                      style={{...inputStyle,background:'#fff'}}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>To'lov usuli</label>
+                    <div style={{display:'flex',gap:8}}>
+                      {[{val:'cash',label:'Naqd'},{val:'card',label:'Karta'}].map(m => (
+                        <div
+                          key={m.val}
+                          onClick={() => setForm({...form,payment_method:m.val})}
+                          style={{
+                            flex:1,padding:'9px',border:`1.5px solid ${form.payment_method===m.val?'#DC2626':'#E5E7EB'}`,
+                            borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer',textAlign:'center',
+                            background:form.payment_method===m.val?'#fff':'#fff',
+                            color:form.payment_method===m.val?'#DC2626':'#6B7280',
+                          }}
+                        >
+                          {m.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {parseMoneyInput(form.payment_amount) > 0 && (
+                    <div style={{fontSize:12,color:'#991B1B'}}>
+                      To'lovdan keyin qarz: <strong>{fmt(Math.max(0, defaultPrice - parseMoneyInput(form.payment_amount)))}</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label style={labelStyle}>Izoh</label>
                 <input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Qo'shimcha izoh..." style={inputStyle}/>
               </div>
             </div>
             <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-              <button onClick={() => setShowModal(false)} style={{padding:'9px 18px',borderRadius:8,border:'1px solid #E5E7EB',background:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Bekor</button>
+              <button onClick={() => { setShowModal(false); setForm(emptyForm) }} style={{padding:'9px 18px',borderRadius:8,border:'1px solid #E5E7EB',background:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Bekor</button>
               <button onClick={saveStudent} disabled={saving} style={{padding:'9px 18px',borderRadius:8,border:'none',background:'#DC2626',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
                 {saving ? 'Saqlanmoqda...' : 'Saqlash'}
               </button>

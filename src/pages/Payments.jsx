@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { checkDeletePassword } from '../lib/checkPassword'
+import { formatMoneyInput, parseMoneyInput } from '../lib/moneyMask'
+import { notifyTelegram } from '../lib/notifyTelegram'
 
 const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(n) + " so'm"
 
@@ -39,7 +41,7 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
     if (!q.trim()) { setSearchResults([]); return }
     const { data } = await supabase
       .from('students')
-      .select('*, groups(name, course_price), payments(amount)')
+      .select('*, groups(name, course_price), agents(full_name), payments(amount)')
       .ilike('full_name', `%${q}%`)
       .limit(8)
     const debtOnly = data?.filter(st => {
@@ -61,7 +63,8 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
 
   const savePayment = async () => {
     if (!selectedStudent) return alert("O'quvchi tanlang!")
-    if (!form.amount || Number(form.amount) <= 0) return alert("Summa kiriting!")
+    const amountNum = parseMoneyInput(form.amount)
+    if (!amountNum || amountNum <= 0) return alert("Summa kiriting!")
     const pass = window.prompt("To'lov kiritish uchun parolni kiriting:")
     if (!pass) return
     const { data: setting } = await supabase.from('settings').select('value').eq('key', 'view_password').single()
@@ -69,7 +72,7 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
     setSaving(true)
     const { error } = await supabase.from('payments').insert([{
       student_id: selectedStudent.id,
-      amount: Number(form.amount),
+      amount: amountNum,
       method: form.method,
       notes: form.notes,
       cashier_id: session.user.id,
@@ -78,6 +81,14 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
     if (error) alert('Xato: ' + error.message)
     else {
       const studentData = selectedStudent
+      const remaining = Math.max(0, getDebt(studentData) - amountNum)
+      notifyTelegram('payment', {
+        student_name: studentData.full_name || '',
+        group_name: studentData.groups?.name || '',
+        agent_name: studentData.agents?.full_name || '',
+        paid_amount: amountNum,
+        remaining_debt: remaining,
+      })
       fetch('https://script.google.com/macros/s/AKfycbyPOIprd0RF-2QmViReI_uJp4xswTF1TSKHylzFxBoCRbgiUnDbZzX74FM3RrO0BbVvdA/exec', {
         method: 'POST',
         mode: 'no-cors',
@@ -85,7 +96,7 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
         body: JSON.stringify({
           record: {
             paid_at: new Date().toISOString(),
-            amount: Number(form.amount),
+            amount: amountNum,
             method: form.method,
             student_name: studentData.full_name || '',
             group_name: studentData.groups?.name || '',
@@ -223,7 +234,14 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
             <div style={{display:'flex',flexDirection:'column',gap:14,marginBottom:14}}>
               <div>
                 <label style={labelStyle}>Summa (so'm) *</label>
-                <input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="500000" style={inputStyle}/>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.amount}
+                  onChange={e => setForm({ ...form, amount: formatMoneyInput(e.target.value) })}
+                  placeholder="3.000.000"
+                  style={inputStyle}
+                />
               </div>
               <div>
                 <label style={labelStyle}>To'lov usuli</label>
@@ -240,9 +258,9 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
                 <input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Ixtiyoriy izoh..." style={inputStyle}/>
               </div>
             </div>
-            {selectedStudent && form.amount && (
+            {selectedStudent && form.amount && parseMoneyInput(form.amount) > 0 && (
               <div style={{background:'#ECFDF5',border:'1px solid #A7F3D0',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:13,color:'#065F46'}}>
-                To'lovdan keyin qoladi: <strong>{fmt(Math.max(0, getDebt(selectedStudent) - Number(form.amount)))}</strong>
+                To'lovdan keyin qoladi: <strong>{fmt(Math.max(0, getDebt(selectedStudent) - parseMoneyInput(form.amount)))}</strong>
               </div>
             )}
             <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
