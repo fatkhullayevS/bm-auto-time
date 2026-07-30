@@ -50,7 +50,7 @@ function buildMessage(type: string, data: Record<string, unknown>) {
         '',
         `👤 O'quvchi: ${escapeHtml(data.student_name)}`,
         `👥 Guruh: ${escapeHtml(data.group_name || '—')}`,
-        `🧑‍💼 Masul: ${escapeHtml(data.agent_name || '—')}`,
+        `🧑‍🏫 O'qituvchi: ${escapeHtml(data.agent_name || data.teacher_name || '—')}`,
         `✅ To'landi: ${fmt(data.paid_amount)} so'm`,
         debtLine,
         `🕐 Vaqt: ${when}`,
@@ -63,7 +63,7 @@ function buildMessage(type: string, data: Record<string, unknown>) {
         '',
         `👤 Ism: ${escapeHtml(data.student_name)}`,
         `👥 Guruh: ${escapeHtml(data.group_name || '—')}`,
-        `🧑‍💼 Masul: ${escapeHtml(data.agent_name || '—')}`,
+        `🧑‍🏫 O'qituvchi: ${escapeHtml(data.agent_name || data.teacher_name || '—')}`,
         `💵 Kurs narxi: ${fmt(data.course_price)} so'm`,
         `🕐 Vaqt: ${when}`,
       ].join('\n')

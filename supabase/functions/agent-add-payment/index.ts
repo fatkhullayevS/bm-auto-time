@@ -1,6 +1,7 @@
 import { handleCors, jsonResponse } from '../_shared/cors.ts'
 import { serviceClient } from '../_shared/supabase.ts'
 import { extractAgentToken, verifyAgentToken } from '../_shared/jwt.ts'
+import { fmtMoney, nowTashkent, sendTelegramMessage } from '../_shared/telegram.ts'
 
 Deno.serve(async (req) => {
   const cors = handleCors(req)
@@ -40,7 +41,7 @@ Deno.serve(async (req) => {
 
     const { data: student, error: stErr } = await sb
       .from('students')
-      .select('id, full_name, agent_id, groups(name)')
+      .select('id, full_name, agent_id, course_price, groups(name), payments(amount)')
       .eq('id', student_id)
       .maybeSingle()
 
@@ -53,11 +54,12 @@ Deno.serve(async (req) => {
     }
 
     const paidAt = new Date().toISOString()
+    const amountNum = Number(amount)
     const { data: payment, error: payErr } = await sb
       .from('payments')
       .insert([{
         student_id,
-        amount: Number(amount),
+        amount: amountNum,
         method,
         notes: notes || `Ma'sul: ${agent.full_name}`,
         paid_at: paidAt,
@@ -70,19 +72,40 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: payErr.message }, 500)
     }
 
-    // Ma'sullar hisoboti uchun log
     const { error: logErr } = await sb.from('agent_payments_log').insert([{
       agent_id: payload.agent_id,
       payment_id: payment.id,
       student_name: student.full_name,
-      amount: Number(amount),
+      amount: amountNum,
       method,
       paid_at: paidAt,
     }])
 
     if (logErr) {
       console.error('agent_payments_log insert:', logErr)
-      // payment allaqachon yozilgan — log xatosini soft qilamiz
+    }
+
+    // Bossga Telegram — ma'sul "O'qituvchi" sifatida
+    try {
+      const alreadyPaid = (student.payments || []).reduce((s, p) => s + Number(p.amount), 0)
+      const remaining = Math.max(0, (student.course_price || 0) - alreadyPaid - amountNum)
+      const debtLine = remaining <= 0
+        ? '✅ To\'liq to\'landi'
+        : `⏳ Qolgan qarz: ${fmtMoney(remaining)} so'm`
+      const groupName = student.groups?.name || '—'
+      const text = [
+        '💰 <b>YANGI TO\'LOV</b>',
+        '',
+        `👤 O'quvchi: ${student.full_name}`,
+        `👥 Guruh: ${groupName}`,
+        `🧑‍🏫 O'qituvchi: ${agent.full_name}`,
+        `✅ To'landi: ${fmtMoney(amountNum)} so'm`,
+        debtLine,
+        `🕐 Vaqt: ${nowTashkent()}`,
+      ].join('\n')
+      await sendTelegramMessage(text)
+    } catch (tgErr) {
+      console.error('Telegram notify (agent payment):', tgErr)
     }
 
     return jsonResponse({

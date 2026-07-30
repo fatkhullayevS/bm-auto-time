@@ -82,10 +82,23 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
     else {
       const studentData = selectedStudent
       const remaining = Math.max(0, getDebt(studentData) - amountNum)
+
+      // Agent (ma'sul) bo'sh bo'lsa — DB dan qayta olamiz
+      let agentName = studentData.agents?.full_name || ''
+      if (!agentName && studentData.agent_id) {
+        const { data: ag } = await supabase
+          .from('agents')
+          .select('full_name')
+          .eq('id', studentData.agent_id)
+          .maybeSingle()
+        agentName = ag?.full_name || ''
+      }
+
       notifyTelegram('payment', {
         student_name: studentData.full_name || '',
         group_name: studentData.groups?.name || '',
-        agent_name: studentData.agents?.full_name || '',
+        agent_name: agentName,
+        teacher_name: agentName,
         paid_amount: amountNum,
         remaining_debt: remaining,
       })
@@ -100,7 +113,7 @@ export default function Payments({ isBoss, session, openModal, setOpenModal }) {
             method: form.method,
             student_name: studentData.full_name || '',
             group_name: studentData.groups?.name || '',
-            teacher_name: '',
+            teacher_name: agentName,
             cashier_name: session.user.email || ''
           }
         })

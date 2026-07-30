@@ -93,13 +93,14 @@ export default function Students({ isBoss, onStudentClick }) {
       if (payErr) {
         alert("O'quvchi saqlandi, lekin to'lov xatosi: " + payErr.message)
       } else {
-        notifyTelegram('payment', {
-          student_name: form.full_name.trim(),
-          group_name: groupName,
-          agent_name: agentName,
-          paid_amount: payAmount,
-          remaining_debt: Math.max(0, defaultPrice - payAmount),
-        })
+      notifyTelegram('payment', {
+        student_name: form.full_name.trim(),
+        group_name: groupName,
+        agent_name: agentName,
+        teacher_name: agentName,
+        paid_amount: payAmount,
+        remaining_debt: Math.max(0, defaultPrice - payAmount),
+      })
       }
     }
 
