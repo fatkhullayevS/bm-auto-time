@@ -115,21 +115,30 @@ export function previousWeekRange() {
   }
 }
 
-export async function sendTelegramMessage(text: string) {
+type TgSendOpts = {
+  chatId?: string | number
+  replyMarkup?: Record<string, unknown>
+}
+
+export async function sendTelegramMessage(text: string, opts: TgSendOpts = {}) {
   const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
-  const chatId = Deno.env.get('TELEGRAM_BOSS_CHAT_ID')
+  const defaultChat = Deno.env.get('TELEGRAM_BOSS_CHAT_ID')
+  const chatId = opts.chatId ?? defaultChat
   if (!token || !chatId) {
     throw new Error('TELEGRAM_BOT_TOKEN yoki TELEGRAM_BOSS_CHAT_ID sozlanmagan')
   }
 
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+  }
+  if (opts.replyMarkup) body.reply_markup = opts.replyMarkup
+
   const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: 'HTML',
-    }),
+    body: JSON.stringify(body),
   })
   const tgJson = await tgRes.json().catch(() => ({}))
   if (!tgRes.ok || !tgJson.ok) {
@@ -137,6 +146,28 @@ export async function sendTelegramMessage(text: string) {
     throw new Error(tgJson?.description || 'Telegram yuborilmadi')
   }
   return tgJson
+}
+
+/** Boss paneli: Balans + Monitoring tugmalari */
+export function bossMenuKeyboard() {
+  return {
+    keyboard: [
+      [{ text: '💰 Balans' }, { text: '📊 Monitoring' }],
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+  }
+}
+
+/** Bugungi kun (Asia/Tashkent) chegaralari */
+export function todayTashkentRange() {
+  const { year, month, day } = tashkentParts()
+  const { start, end } = tashkentDayBounds(year, month, day)
+  return {
+    start,
+    end,
+    label: formatTashkentDate(year, month, day),
+  }
 }
 
 /** Cron so'rovini tekshirish: x-cron-secret yoki Authorization Bearer */

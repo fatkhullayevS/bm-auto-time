@@ -1,6 +1,4 @@
-# Telegram bildirishnomalar
-
-Boshliqqa bir tomonlama `sendMessage` — webhook/server kerak emas.
+# Telegram bildirishnomalar + bot menyu
 
 ## Secrets
 
@@ -13,13 +11,51 @@ Yoki Dashboard → **Project Settings → Edge Functions → Secrets**.
 
 Chat ID olish: `@userinfobot` yoki `@getidsbot` ga yozing.
 
+Ixtiyoriy xavfsizlik:
+
+```bash
+npx supabase secrets set TELEGRAM_WEBHOOK_SECRET="uzun-tasodifiy-kalit"
+```
+
 ## Deploy
 
 ```bash
-npx supabase functions deploy send-telegram-notification
+npx supabase functions deploy send-telegram-notification --no-verify-jwt
+npx supabase functions deploy telegram-bot --no-verify-jwt
 ```
 
-## Qachon yuboriladi
+## Bot menyu (Balans / Monitoring)
+
+Boss chatida pastda 2 ta tugma:
+
+| Tugma | Natija |
+|-------|--------|
+| 💰 Balans | `SUM(payments) − SUM(expenses)` — aktiv kassa |
+| 📊 Monitoring | Bugungi to‘lovlar + rasxotlar (Tashkent sanasi) |
+
+Buyruqlar: `/start`, `/balans`, `/monitoring`
+
+Faqat `TELEGRAM_BOSS_CHAT_ID` dagi chat javob oladi.
+
+### Webhookni bir marta ulash
+
+`CRON_SECRET` o‘rnatilgan bo‘lsa:
+
+```bash
+curl "https://XXXX.supabase.co/functions/v1/telegram-bot?setup=1" \
+  -H "x-cron-secret: YOUR_CRON_SECRET"
+```
+
+Yoki Bot API:
+
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -d "url=https://XXXX.supabase.co/functions/v1/telegram-bot"
+```
+
+Keyin botga `/start` yuboring — tugmalar chiqadi.
+
+## Avtomatik bildirishnomalar
 
 | Type | Qayerdan |
 |------|----------|
