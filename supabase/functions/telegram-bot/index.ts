@@ -77,19 +77,22 @@ function clearPending(chatId: string | number) {
 
 async function buildBalanceText() {
   const sb = serviceClient()
-  const [{ data: pays }, { data: exps }] = await Promise.all([
+  const [{ data: pays }, { data: exps }, { data: gas }] = await Promise.all([
     sb.from('payments').select('amount'),
     sb.from('expenses').select('amount'),
+    sb.from('gas_allocations').select('amount'),
   ])
   const income = (pays || []).reduce((s, p) => s + Number(p.amount), 0)
   const expense = (exps || []).reduce((s, e) => s + Number(e.amount), 0)
-  const balance = income - expense
+  const gasSum = (gas || []).reduce((s, g) => s + Number(g.amount), 0)
+  const balance = income - expense - gasSum
 
   return [
     '💼 <b>KASSA BALANSI</b>',
     '',
     `💰 Jami to'lovlar: ${fmtMoney(income)} so'm`,
     `📤 Jami rasxotlar: ${fmtMoney(expense)} so'm`,
+    `⛽ Gaz ajratmasi: ${fmtMoney(gasSum)} so'm`,
     '',
     `✅ <b>Aktiv balans: ${fmtMoney(balance)} so'm</b>`,
     `🕐 ${nowTashkent()}`,
@@ -101,7 +104,7 @@ async function buildMonitoringText(range: DateRange) {
   const startIso = range.start.toISOString()
   const endIso = range.end.toISOString()
 
-  const [{ data: pays }, { data: exps }] = await Promise.all([
+  const [{ data: pays }, { data: exps }, { data: gasRows }, { data: gasAllocs }] = await Promise.all([
     sb
       .from('payments')
       .select('amount, method, paid_at, period_from, period_to, students(full_name), notes')
@@ -114,13 +117,28 @@ async function buildMonitoringText(range: DateRange) {
       .gte('created_at', startIso)
       .lte('created_at', endIso)
       .order('created_at', { ascending: false }),
+    sb
+      .from('gas_fillings')
+      .select('plate_number, volume_m3, price_per_m3, total_amount, filled_at')
+      .gte('filled_at', startIso)
+      .lte('filled_at', endIso)
+      .order('filled_at', { ascending: false }),
+    sb
+      .from('gas_allocations')
+      .select('amount')
+      .gte('allocated_at', startIso)
+      .lte('allocated_at', endIso),
   ])
 
   const payments = pays || []
   const expenses = exps || []
+  const gasList = gasRows || []
   const income = payments.reduce((s, p) => s + Number(p.amount), 0)
   const expenseSum = expenses.reduce((s, e) => s + Number(e.amount), 0)
-  const dayDiff = income - expenseSum
+  const gasSum = gasList.reduce((s, g) => s + Number(g.total_amount), 0)
+  const gasAllocSum = (gasAllocs || []).reduce((s, g) => s + Number(g.amount), 0)
+  // Kassadan faqat ajratma chiqadi; quyishlar ichki byudjet
+  const dayDiff = income - expenseSum - gasAllocSum
 
   const payLines = payments.slice(0, MAX_LINES).map((p) => {
     const name = p.students?.full_name
@@ -150,9 +168,16 @@ async function buildMonitoringText(range: DateRange) {
     expLines.push(`… va yana ${expenses.length - MAX_LINES} ta`)
   }
 
+  const gasLines = gasList.slice(0, MAX_LINES).map((g) => {
+    return `• ${escapeHtml(g.plate_number)} — ${fmtMoney(g.volume_m3)} m³ × ${fmtMoney(g.price_per_m3)} = ${fmtMoney(g.total_amount)}`
+  })
+  if (gasList.length > MAX_LINES) {
+    gasLines.push(`… va yana ${gasList.length - MAX_LINES} ta`)
+  }
+
   const title = '📊 <b>MONITORING</b>'
 
-  if (payments.length === 0 && expenses.length === 0) {
+  if (payments.length === 0 && expenses.length === 0 && gasList.length === 0) {
     return [
       title,
       `🗓 ${range.label}`,
@@ -171,6 +196,9 @@ async function buildMonitoringText(range: DateRange) {
     '',
     `📤 <b>RASXOTLAR</b> (${expenses.length} ta): ${fmtMoney(expenseSum)} so'm`,
     ...(expLines.length ? expLines : ['• Yo\'q']),
+    '',
+    `⛽ <b>GAZ</b> (${gasList.length} ta): ${fmtMoney(gasSum)} so'm`,
+    ...(gasLines.length ? gasLines : ['• Yo\'q']),
     '',
     `📈 Farq: ${dayDiff >= 0 ? '+' : ''}${fmtMoney(dayDiff)} so'm`,
     `🕐 ${nowTashkent()}`,

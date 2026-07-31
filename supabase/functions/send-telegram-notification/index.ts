@@ -101,6 +101,35 @@ function buildMessage(type: string, data: Record<string, unknown>) {
         `🕐 Vaqt: ${when}`,
       ].filter(Boolean).join('\n')
 
+    case 'gas_filling':
+      return [
+        '⛽ <b>GAZ QUYISH</b>',
+        '',
+        `🚗 Raqam: ${escapeHtml(data.plate_number)}`,
+        `📐 Kub: ${escapeHtml(data.volume_m3)} m³`,
+        `💵 1 kub: ${fmt(data.price_per_m3)} so'm`,
+        `✅ Jami: ${fmt(data.total_amount)} so'm`,
+        data.remaining_after !== undefined && data.remaining_after !== null
+          ? `💼 Qolgan byudjet: ${fmt(data.remaining_after)} so'm`
+          : null,
+        data.notes ? `📝 Izoh: ${escapeHtml(data.notes)}` : null,
+        `👤 Kiritdi: ${escapeHtml(data.created_by_name || '—')}`,
+        data.filled_at ? `🗓 Sana: ${escapeHtml(data.filled_at)}` : `🕐 Vaqt: ${when}`,
+      ].filter(Boolean).join('\n')
+
+    case 'gas_allocation':
+      return [
+        '⛽ <b>GAZ AJRATMASI</b>',
+        '',
+        `💵 Summa: ${fmt(data.amount)} so'm`,
+        data.remaining_after !== undefined && data.remaining_after !== null
+          ? `💼 Byudjet qoldiq: ${fmt(data.remaining_after)} so'm`
+          : null,
+        data.notes ? `📝 Izoh: ${escapeHtml(data.notes)}` : null,
+        `👤 Kiritdi: ${escapeHtml(data.created_by_name || '—')}`,
+        data.allocated_at ? `🗓 Sana: ${escapeHtml(data.allocated_at)}` : `🕐 Vaqt: ${when}`,
+      ].filter(Boolean).join('\n')
+
     default:
       return null
   }

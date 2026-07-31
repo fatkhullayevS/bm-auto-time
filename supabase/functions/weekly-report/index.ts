@@ -34,29 +34,36 @@ Deno.serve(async (req) => {
     const [
       { data: weekPays },
       { data: weekExps },
+      { data: weekGas },
       { data: allPays },
       { data: allExps },
+      { data: allGas },
     ] = await Promise.all([
       sb.from('payments').select('amount').gte('paid_at', startIso).lte('paid_at', endIso),
       sb.from('expenses')
         .select('amount, expense_categories(name)')
         .gte('created_at', startIso)
         .lte('created_at', endIso),
+      sb.from('gas_allocations').select('amount').gte('allocated_at', startIso).lte('allocated_at', endIso),
       sb.from('payments').select('amount'),
       sb.from('expenses').select('amount'),
+      sb.from('gas_allocations').select('amount'),
     ])
 
     const weekIncome = (weekPays || []).reduce((s, p) => s + Number(p.amount), 0)
-    const weekExpense = (weekExps || []).reduce((s, e) => s + Number(e.amount), 0)
+    const weekGasAlloc = (weekGas || []).reduce((s, g) => s + Number(g.amount), 0)
+    const weekExpense = (weekExps || []).reduce((s, e) => s + Number(e.amount), 0) + weekGasAlloc
     const balance =
       (allPays || []).reduce((s, p) => s + Number(p.amount), 0) -
-      (allExps || []).reduce((s, e) => s + Number(e.amount), 0)
+      (allExps || []).reduce((s, e) => s + Number(e.amount), 0) -
+      (allGas || []).reduce((s, g) => s + Number(g.amount), 0)
 
     const byCat: Record<string, number> = {}
     ;(weekExps || []).forEach((e) => {
       const name = e.expense_categories?.name || 'Umumiy'
       byCat[name] = (byCat[name] || 0) + Number(e.amount)
     })
+    if (weekGasAlloc > 0) byCat['Gaz'] = (byCat['Gaz'] || 0) + weekGasAlloc
     const catLines = Object.entries(byCat)
       .sort((a, b) => b[1] - a[1])
       .map(([name, sum]) => `• ${name}: ${fmtMoney(sum)} so'm`)

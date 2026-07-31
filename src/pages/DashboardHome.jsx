@@ -22,7 +22,7 @@ export default function DashboardHome({ isBoss }) {
 
   const loadStats = async () => {
     setLoading(true)
-    const [{ count: students }, { count: groups }, { count: teachers }, { data: pays }, { data: allStudents }, { data: allPays }, { data: allExps }] = await Promise.all([
+    const [{ count: students }, { count: groups }, { count: teachers }, { data: pays }, { data: allStudents }, { data: allPays }, { data: allExps }, { data: allGas }] = await Promise.all([
       supabase.from('students').select('*', { count: 'exact', head: true }),
       supabase.from('groups').select('*', { count: 'exact', head: true }).eq('status','active'),
       supabase.from('teachers').select('*', { count: 'exact', head: true }),
@@ -30,10 +30,12 @@ export default function DashboardHome({ isBoss }) {
       supabase.from('students').select('course_price, payments(amount)'),
       supabase.from('payments').select('amount'),
       supabase.from('expenses').select('amount'),
+      supabase.from('gas_allocations').select('amount'),
     ])
 
     const totalPaid = allPays?.reduce((s,p) => s+Number(p.amount), 0) || 0
     const totalExp = allExps?.reduce((s,e) => s+Number(e.amount), 0) || 0
+    const totalGas = allGas?.reduce((s,g) => s+Number(g.amount), 0) || 0
 
     let debt = 0
     allStudents?.forEach(st => {
@@ -48,7 +50,7 @@ export default function DashboardHome({ isBoss }) {
       teachers: teachers||0,
       totalPaid,
       totalDebt: debt,
-      cashBalance: totalPaid - totalExp,
+      cashBalance: totalPaid - totalExp - totalGas,
     })
     setPayments(pays || [])
     setLoading(false)

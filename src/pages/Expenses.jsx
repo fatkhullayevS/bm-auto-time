@@ -60,6 +60,7 @@ export default function Expenses({ session, canWrite }) {
   const [categories, setCategories] = useState([])
   const [totalPayments, setTotalPayments] = useState(0)
   const [totalExpenses, setTotalExpenses] = useState(0)
+  const [totalGas, setTotalGas] = useState(0)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
@@ -91,27 +92,31 @@ export default function Expenses({ session, canWrite }) {
 
   const loadAll = async () => {
     setLoading(true)
-    const [{ data: cats }, { data: exps }, { data: pays }] = await Promise.all([
+    const [{ data: cats }, { data: exps }, { data: pays }, { data: gas }] = await Promise.all([
       supabase.from('expense_categories').select('id, name').order('name'),
       supabase
         .from('expenses')
         .select('*, expense_categories(name), profiles(full_name)')
         .order('created_at', { ascending: false }),
       supabase.from('payments').select('amount'),
+      supabase.from('gas_allocations').select('amount'),
     ])
 
     const expenseList = exps || []
     const paySum = (pays || []).reduce((s, p) => s + Number(p.amount), 0)
     const expSum = expenseList.reduce((s, e) => s + Number(e.amount), 0)
+    const gasSum = (gas || []).reduce((s, g) => s + Number(g.amount), 0)
 
     setCategories(cats || [])
     setExpenses(expenseList)
     setTotalPayments(paySum)
     setTotalExpenses(expSum)
+    setTotalGas(gasSum)
     setLoading(false)
   }
 
-  const balance = totalPayments - totalExpenses
+  const balance = totalPayments - totalExpenses - totalGas
+  const rasxotJami = totalExpenses + totalGas
 
   const filtered = expenses.filter((e) => {
     if (filterCategory === '__general__') {
@@ -345,7 +350,12 @@ export default function Expenses({ session, canWrite }) {
           </div>
           <div style={{ background: 'rgba(255,255,255,.08)', borderRadius: 10, padding: '12px 16px', minWidth: 120 }}>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', marginBottom: 4 }}>Rasxot</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#F87171' }}>{fmt(totalExpenses)}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#F87171' }}>{fmt(rasxotJami)}</div>
+            {totalGas > 0 && (
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', marginTop: 4 }}>
+                shundan gaz ajratma: {fmt(totalGas)}
+              </div>
+            )}
           </div>
         </div>
       </div>

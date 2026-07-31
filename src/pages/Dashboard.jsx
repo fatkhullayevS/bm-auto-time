@@ -13,6 +13,7 @@ import AgentReports from './AgentReports'
 import Archive from './Archive'
 import Admins from './Admins'
 import Expenses from './Expenses'
+import Gas from './Gas'
 
 export default function Dashboard({ session }) {
   const [currentPage, setCurrentPage] = useState('dashboard')
@@ -43,6 +44,7 @@ export default function Dashboard({ session }) {
       case 'agents': return <Agents isBoss={isBoss} canManageAgents={canManageAgents} onStudentClick={(id) => openStudent(id, 'agents')} />
       case 'payments': return <Payments isBoss={isBoss} session={session} openModal={openPayment} setOpenModal={setOpenPayment} />
       case 'expenses': return <Expenses session={session} canWrite={canWriteExpenses} />
+      case 'gas': return <Gas session={session} canWrite={canWriteExpenses} isBoss={isBoss} />
       case 'groups': return <Groups isBoss={isBoss} onStudentClick={(id) => openStudent(id, 'groups')} />
       case 'search': return <Search onStudentClick={(id) => openStudent(id, 'search')} />
       case 'reports': return <Reports isBoss={isBoss} />
