@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
 
     const byCat: Record<string, number> = {}
     ;(monthExps || []).forEach((e) => {
-      const name = e.expense_categories?.name || 'Boshqa'
+      const name = e.expense_categories?.name || 'Umumiy'
       byCat[name] = (byCat[name] || 0) + Number(e.amount)
     })
     const catLines = Object.entries(byCat)

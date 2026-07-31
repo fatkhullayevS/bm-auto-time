@@ -24,20 +24,31 @@ npx supabase functions deploy send-telegram-notification --no-verify-jwt
 npx supabase functions deploy telegram-bot --no-verify-jwt
 ```
 
-## Bot menyu (Balans / Monitoring)
+## Bot menyu (Balans / Monitoring / Rasxot)
 
-Boss chatida pastda 2 ta tugma:
+Boss chatida pastda tugmalar:
 
 | Tugma | Natija |
 |-------|--------|
-| 💰 Balans | `SUM(payments) − SUM(expenses)` — aktiv kassa |
-| 📊 Monitoring | Bugungi to‘lovlar + rasxotlar (Tashkent sanasi) |
+| 💰 Balans | `SUM(payments) − SUM(expenses)` — aktiv kassa (hamma vaqt) |
+| 📊 Monitoring | Sana tanlash → to‘lovlar + rasxotlar |
+| 📤 Rasxot | Sana tanlash → faqat rasxotlar |
 
-Buyruqlar: `/start`, `/balans`, `/monitoring`
+Sana tanlash (Monitoring va Rasxot):
+
+| Tanlov | Davr |
+|--------|------|
+| 📅 Bugun | Bugungi kun (Tashkent) |
+| 🗓 7 kun | Oxirgi 7 kun |
+| ✏️ Sana tanlash | `31.07.2026` yoki `01.07.2026-31.07.2026` |
+
+Buyruqlar: `/start`, `/balans`, `/monitoring`, `/rasxot`
 
 Faqat `TELEGRAM_BOSS_CHAT_ID` dagi chat javob oladi.
 
 ### Webhookni bir marta ulash
+
+Deploydan keyin **qayta** chaqiring — `callback_query` (sana tugmalari) uchun kerak.
 
 `CRON_SECRET` o‘rnatilgan bo‘lsa:
 
@@ -50,7 +61,8 @@ Yoki Bot API:
 
 ```bash
 curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
-  -d "url=https://XXXX.supabase.co/functions/v1/telegram-bot"
+  -d "url=https://XXXX.supabase.co/functions/v1/telegram-bot" \
+  -d 'allowed_updates=["message","callback_query"]'
 ```
 
 Keyin botga `/start` yuboring — tugmalar chiqadi.

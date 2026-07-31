@@ -115,10 +115,10 @@ export default function DashboardHome({ isBoss }) {
                 <tr key={i} style={{borderBottom:'1px solid #F9FAFB'}} onMouseOver={e=>e.currentTarget.style.background='#FAFBFF'} onMouseOut={e=>e.currentTarget.style.background=''}>
                   <td style={{padding:'12px 16px'}}>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      <div style={{width:28,height:28,borderRadius:7,background:'#DC2626',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:11,fontWeight:700,flexShrink:0}}>
-                        {p.students?.full_name?.[0]||'?'}
+                      <div style={{width:28,height:28,borderRadius:7,background:p.students?'#DC2626':'#059669',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:11,fontWeight:700,flexShrink:0}}>
+                        {p.students?.full_name?.[0]||'U'}
                       </div>
-                      <span style={{fontSize:13,fontWeight:600}}>{p.students?.full_name||'—'}</span>
+                      <span style={{fontSize:13,fontWeight:600}}>{p.students?.full_name||"Umumiy to'lov"}</span>
                     </div>
                   </td>
                   <td style={{padding:'12px 16px',fontSize:13,color:'#6B7280'}}>{p.students?.groups?.name||'—'}</td>

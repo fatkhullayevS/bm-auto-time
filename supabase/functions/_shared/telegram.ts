@@ -120,11 +120,26 @@ type TgSendOpts = {
   replyMarkup?: Record<string, unknown>
 }
 
-export async function sendTelegramMessage(text: string, opts: TgSendOpts = {}) {
+async function telegramApi(method: string, body: Record<string, unknown>) {
   const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
+  if (!token) throw new Error('TELEGRAM_BOT_TOKEN sozlanmagan')
+  const tgRes = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const tgJson = await tgRes.json().catch(() => ({}))
+  if (!tgRes.ok || !tgJson.ok) {
+    console.error(`Telegram API ${method} xato:`, tgJson)
+    throw new Error(tgJson?.description || `Telegram ${method} xato`)
+  }
+  return tgJson
+}
+
+export async function sendTelegramMessage(text: string, opts: TgSendOpts = {}) {
   const defaultChat = Deno.env.get('TELEGRAM_BOSS_CHAT_ID')
   const chatId = opts.chatId ?? defaultChat
-  if (!token || !chatId) {
+  if (!chatId) {
     throw new Error('TELEGRAM_BOT_TOKEN yoki TELEGRAM_BOSS_CHAT_ID sozlanmagan')
   }
 
@@ -134,33 +149,48 @@ export async function sendTelegramMessage(text: string, opts: TgSendOpts = {}) {
     parse_mode: 'HTML',
   }
   if (opts.replyMarkup) body.reply_markup = opts.replyMarkup
-
-  const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const tgJson = await tgRes.json().catch(() => ({}))
-  if (!tgRes.ok || !tgJson.ok) {
-    console.error('Telegram API xato:', tgJson)
-    throw new Error(tgJson?.description || 'Telegram yuborilmadi')
-  }
-  return tgJson
+  return telegramApi('sendMessage', body)
 }
 
-/** Boss paneli: Balans + Monitoring tugmalari */
+export async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  const body: Record<string, unknown> = { callback_query_id: callbackQueryId }
+  if (text) body.text = text
+  try {
+    await telegramApi('answerCallbackQuery', body)
+  } catch (e) {
+    console.error('answerCallbackQuery:', e)
+  }
+}
+
+/** Boss paneli: Balans + Monitoring + Rasxot */
 export function bossMenuKeyboard() {
   return {
     keyboard: [
       [{ text: '💰 Balans' }, { text: '📊 Monitoring' }],
+      [{ text: '📤 Rasxot' }],
     ],
     resize_keyboard: true,
     is_persistent: true,
   }
 }
 
+/** Sana tanlash: Bugun / 7 kun / maxsus sana */
+export function periodChoiceKeyboard(prefix: 'exp' | 'mon') {
+  return {
+    inline_keyboard: [
+      [
+        { text: '📅 Bugun', callback_data: `${prefix}:today` },
+        { text: '🗓 7 kun', callback_data: `${prefix}:7d` },
+      ],
+      [{ text: '✏️ Sana tanlash', callback_data: `${prefix}:custom` }],
+    ],
+  }
+}
+
+export type DateRange = { start: Date; end: Date; label: string }
+
 /** Bugungi kun (Asia/Tashkent) chegaralari */
-export function todayTashkentRange() {
+export function todayTashkentRange(): DateRange {
   const { year, month, day } = tashkentParts()
   const { start, end } = tashkentDayBounds(year, month, day)
   return {
@@ -168,6 +198,77 @@ export function todayTashkentRange() {
     end,
     label: formatTashkentDate(year, month, day),
   }
+}
+
+/** Oxirgi N kun: bugun va undan oldingi (N-1) kun (Tashkent) */
+export function lastNDaysTashkentRange(n: number): DateRange {
+  const { year, month, day } = tashkentParts()
+  const startDt = new Date(Date.UTC(year, month - 1, day - (n - 1)))
+  const sy = startDt.getUTCFullYear()
+  const sm = startDt.getUTCMonth() + 1
+  const sd = startDt.getUTCDate()
+  const { start } = tashkentDayBounds(sy, sm, sd)
+  const { end } = tashkentDayBounds(year, month, day)
+  return {
+    start,
+    end,
+    label: n === 1
+      ? formatTashkentDate(year, month, day)
+      : `${formatTashkentDate(sy, sm, sd)} — ${formatTashkentDate(year, month, day)}`,
+  }
+}
+
+/** Bitta kun yoki oraliq (Tashkent) */
+export function rangeFromYmd(
+  y1: number, m1: number, d1: number,
+  y2?: number, m2?: number, d2?: number,
+): DateRange | null {
+  if (!isValidYmd(y1, m1, d1)) return null
+  if (y2 != null && m2 != null && d2 != null && !isValidYmd(y2, m2, d2)) return null
+
+  let a = { year: y1, month: m1, day: d1 }
+  let b = y2 != null && m2 != null && d2 != null
+    ? { year: y2, month: m2, day: d2 }
+    : a
+
+  const aMs = Date.UTC(a.year, a.month - 1, a.day)
+  const bMs = Date.UTC(b.year, b.month - 1, b.day)
+  if (aMs > bMs) {
+    const tmp = a
+    a = b
+    b = tmp
+  }
+
+  const { start } = tashkentDayBounds(a.year, a.month, a.day)
+  const { end } = tashkentDayBounds(b.year, b.month, b.day)
+  const same = a.year === b.year && a.month === b.month && a.day === b.day
+  return {
+    start,
+    end,
+    label: same
+      ? formatTashkentDate(a.year, a.month, a.day)
+      : `${formatTashkentDate(a.year, a.month, a.day)} — ${formatTashkentDate(b.year, b.month, b.day)}`,
+  }
+}
+
+function isValidYmd(y: number, m: number, d: number) {
+  if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return false
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() + 1 === m && dt.getUTCDate() === d
+}
+
+/** "31.07.2026" yoki "01.07.2026-31.07.2026" */
+export function parseDateRangeText(text: string): DateRange | null {
+  const t = text.trim().replace(/\s+/g, '')
+  const m = t.match(
+    /^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[-–—](\d{1,2})\.(\d{1,2})\.(\d{4}))?$/,
+  )
+  if (!m) return null
+  const d1 = Number(m[1]), mo1 = Number(m[2]), y1 = Number(m[3])
+  if (m[4]) {
+    return rangeFromYmd(y1, mo1, d1, Number(m[6]), Number(m[5]), Number(m[4]))
+  }
+  return rangeFromYmd(y1, mo1, d1)
 }
 
 /** Cron so'rovini tekshirish: x-cron-secret yoki Authorization Bearer */

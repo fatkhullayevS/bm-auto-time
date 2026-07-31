@@ -57,6 +57,17 @@ function buildMessage(type: string, data: Record<string, unknown>) {
       ].join('\n')
     }
 
+    case 'general_payment':
+      return [
+        '💰 <b>UMUMIY TO\'LOV</b>',
+        '',
+        `🗓 Davr: ${escapeHtml(data.period || '—')}`,
+        `✅ Summa: ${fmt(data.paid_amount)} so'm`,
+        `💳 Usul: ${escapeHtml(data.method || '—')}`,
+        data.notes ? `📝 Izoh: ${escapeHtml(data.notes)}` : null,
+        `🕐 Vaqt: ${when}`,
+      ].filter(Boolean).join('\n')
+
     case 'new_student':
       return [
         '🆕 <b>YANGI O\'QUVCHI QO\'SHILDI</b>',
@@ -76,8 +87,19 @@ function buildMessage(type: string, data: Record<string, unknown>) {
         `💵 Summa: ${fmt(data.amount)} so'm`,
         `📝 Izoh: ${escapeHtml(data.description || '—')}`,
         `👤 Kiritdi: ${escapeHtml(data.created_by_name || '—')}`,
-        `🕐 Vaqt: ${when}`,
+        data.spent_at ? `🗓 Sana: ${escapeHtml(data.spent_at)}` : `🕐 Vaqt: ${when}`,
       ].join('\n')
+
+    case 'general_expense':
+      return [
+        '📤 <b>UMUMIY RASXOT</b>',
+        '',
+        `🗓 Davr: ${escapeHtml(data.period || '—')}`,
+        `💵 Summa: ${fmt(data.amount)} so'm`,
+        data.description ? `📝 Izoh: ${escapeHtml(data.description)}` : null,
+        `👤 Kiritdi: ${escapeHtml(data.created_by_name || '—')}`,
+        `🕐 Vaqt: ${when}`,
+      ].filter(Boolean).join('\n')
 
     default:
       return null

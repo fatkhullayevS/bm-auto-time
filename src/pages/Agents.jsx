@@ -20,6 +20,10 @@ export default function Agents({ isBoss, canManageAgents, onStudentClick }) {
   const [passTarget, setPassTarget] = useState(null)
   const [passForm, setPassForm] = useState({ login: '', password: '' })
   const [savingPass, setSavingPass] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteStudent, setDeleteStudent] = useState(null)
+  const [deletePass, setDeletePass] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { loadAgents() }, [])
 
@@ -167,6 +171,40 @@ export default function Agents({ isBoss, canManageAgents, onStudentClick }) {
     loadAgents()
   }
 
+  const openDeleteStudent = (st, e) => {
+    e.stopPropagation()
+    setDeleteStudent(st)
+    setDeletePass('')
+    setShowDeleteModal(true)
+  }
+
+  const confirmDeleteStudent = async () => {
+    if (!deleteStudent) return
+    const ok = await checkDeletePassword(deletePass)
+    if (!ok) return alert("Parol noto'g'ri!")
+    setDeleting(true)
+
+    const { data: pays } = await supabase
+      .from('payments')
+      .select('id')
+      .eq('student_id', deleteStudent.id)
+    const paymentIds = (pays || []).map((p) => p.id)
+
+    if (paymentIds.length > 0) {
+      await supabase.from('agent_payments_log').delete().in('payment_id', paymentIds)
+      await supabase.from('payments').delete().in('id', paymentIds)
+    }
+
+    const { error } = await supabase.from('students').delete().eq('id', deleteStudent.id)
+    setDeleting(false)
+    if (error) return alert(error.message)
+
+    setAgentStudents((prev) => prev.filter((s) => s.id !== deleteStudent.id))
+    setShowDeleteModal(false)
+    setDeleteStudent(null)
+    setDeletePass('')
+  }
+
   const getPaid = (st) => st.payments?.reduce((s, p) => s + Number(p.amount), 0) || 0
   const getDebt = (st) => Math.max(0, (st.course_price || 0) - getPaid(st))
 
@@ -245,14 +283,55 @@ export default function Agents({ isBoss, canManageAgents, onStudentClick }) {
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#059669' }}>{fmt(paid)}</span>
                   {debt > 0 && <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: '#FEF2F2', color: '#DC2626' }}>Qarz: {fmt(debt)}</span>}
                   {debt === 0 && st.course_price > 0 && <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: '#ECFDF5', color: '#059669' }}>To'liq</span>}
+                  {isBoss && (
+                    <button
+                      onClick={(e) => openDeleteStudent(st, e)}
+                      title="To'liq o'chirish"
+                      style={{ background: '#FEF2F2', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', color: '#DC2626' }}
+                    >
+                      O'chirish
+                    </button>
+                  )}
                 </div>
               </div>
             )
           })}
         </div>
 
+        {showDeleteModal && renderDeleteModal()}
         {showPassModal && renderPassModal()}
         {showModal && renderFormModal()}
+      </div>
+    )
+  }
+
+  function renderDeleteModal() {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={(e) => e.target === e.currentTarget && !deleting && setShowDeleteModal(false)}>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,.15)' }}>
+          <h2 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 8 }}>O'quvchini to'liq o'chirish</h2>
+          <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 20 }}>
+            <strong>{deleteStudent?.full_name}</strong> va uning barcha to'lovlari butunlay o'chiriladi. Bu amalni qaytarib bo'lmaydi. Maxsus parolni kiriting.
+          </p>
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>Maxsus parol</label>
+            <input
+              type="password"
+              value={deletePass}
+              onChange={(e) => setDeletePass(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && confirmDeleteStudent()}
+              placeholder="Parol kiriting..."
+              autoFocus
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button onClick={() => setShowDeleteModal(false)} disabled={deleting} style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #E5E7EB', background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Bekor</button>
+            <button onClick={confirmDeleteStudent} disabled={deleting} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {deleting ? "O'chirilmoqda..." : "O'chirish"}
+            </button>
+          </div>
+        </div>
       </div>
     )
   }

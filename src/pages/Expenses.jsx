@@ -2,11 +2,57 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatMoneyInput, parseMoneyInput } from '../lib/moneyMask'
 import { notifyTelegram } from '../lib/notifyTelegram'
+import { checkViewPassword } from '../lib/checkPassword'
 
 const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(Math.round(Number(n) || 0)) + " so'm"
 const fmtDate = (d) => new Date(d).toLocaleString('uz-UZ', {
   day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  timeZone: 'Asia/Tashkent',
 })
+
+/** Hozirgi sana/soat (Asia/Tashkent) — input defaultlari uchun */
+function nowTashkentLocal() {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Tashkent',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date()).map((p) => [p.type, p.value]),
+  )
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+  }
+}
+
+/** Tashkent sana+soat → ISO (UTC). Tashkent = UTC+5, DST yo'q */
+function tashkentToIso(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return null
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const [hh, mm] = timeStr.split(':').map(Number)
+  if (![y, m, d, hh, mm].every((n) => Number.isFinite(n))) return null
+  return new Date(Date.UTC(y, m - 1, d, hh - 5, mm, 0)).toISOString()
+}
+
+function tashkentDateEndIso(dateStr) {
+  if (!dateStr) return null
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d, 18, 59, 59, 999)).toISOString()
+}
+
+function fmtPeriod(from, to) {
+  const f = (d) => {
+    if (!d) return '—'
+    const [y, m, day] = String(d).slice(0, 10).split('-')
+    return `${day}.${m}.${y}`
+  }
+  if (!from && !to) return null
+  return `${f(from)} — ${f(to)}`
+}
 
 export default function Expenses({ session, canWrite }) {
   const [loading, setLoading] = useState(true)
@@ -18,6 +64,8 @@ export default function Expenses({ session, canWrite }) {
   const [dateTo, setDateTo] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [showPassModal, setShowPassModal] = useState(false)
+  const [savePass, setSavePass] = useState('')
   const [showCatModal, setShowCatModal] = useState(false)
   const [newCatName, setNewCatName] = useState('')
   const [savingCat, setSavingCat] = useState(false)
@@ -26,12 +74,17 @@ export default function Expenses({ session, canWrite }) {
   const [deleteId, setDeleteId] = useState(null)
   const [deletePass, setDeletePass] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [expType, setExpType] = useState('normal') // normal | general
   const [form, setForm] = useState({
     category_id: '',
     newCategory: '',
     useNewCategory: false,
     amount: '',
     description: '',
+    date: '',
+    time: '',
+    periodFrom: '',
+    periodTo: '',
   })
 
   useEffect(() => { loadAll() }, [])
@@ -61,20 +114,29 @@ export default function Expenses({ session, canWrite }) {
   const balance = totalPayments - totalExpenses
 
   const filtered = expenses.filter((e) => {
-    if (filterCategory && e.category_id !== filterCategory) return false
+    if (filterCategory === '__general__') {
+      if (e.category_id) return false
+    } else if (filterCategory && e.category_id !== filterCategory) {
+      return false
+    }
     if (dateFrom && new Date(e.created_at) < new Date(dateFrom)) return false
     if (dateTo && new Date(e.created_at) > new Date(dateTo + 'T23:59:59')) return false
     return true
   })
 
-  // Kategoriya taqsimoti — BARCHA kategoriyalar (0 so'm bo'lsa ham)
+  // Kategoriya taqsimoti — kategoriyalar + umumiy
   const spentById = {}
+  let generalSpent = 0
   expenses.forEach((e) => {
+    if (!e.category_id) {
+      generalSpent += Number(e.amount)
+      return
+    }
     const id = e.category_id
     spentById[id] = (spentById[id] || 0) + Number(e.amount)
   })
-  const categoryRows = categories
-    .map((c) => {
+  const categoryRows = [
+    ...categories.map((c) => {
       const amount = spentById[c.id] || 0
       return {
         id: c.id,
@@ -82,16 +144,30 @@ export default function Expenses({ session, canWrite }) {
         amount,
         pct: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
       }
-    })
-    .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name))
+    }),
+    ...(generalSpent > 0 || expenses.some((e) => !e.category_id)
+      ? [{
+          id: '__general__',
+          name: "Umumiy rasxot",
+          amount: generalSpent,
+          pct: totalExpenses > 0 ? (generalSpent / totalExpenses) * 100 : 0,
+        }]
+      : []),
+  ].sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name))
 
   const openAdd = () => {
+    const now = nowTashkentLocal()
+    setExpType('normal')
     setForm({
       category_id: categories[0]?.id || '',
       newCategory: '',
       useNewCategory: false,
       amount: '',
       description: '',
+      date: now.date,
+      time: now.time,
+      periodFrom: '',
+      periodTo: '',
     })
     setShowModal(true)
   }
@@ -120,34 +196,92 @@ export default function Expenses({ session, canWrite }) {
     setNewCatName('')
   }
 
-  const saveExpense = async () => {
+  const requestSaveExpense = () => {
     const amountNum = parseMoneyInput(form.amount)
     if (!amountNum || amountNum <= 0) return alert('Summa kiriting!')
-    if (!form.category_id) return alert('Kategoriya tanlang!')
 
+    if (expType === 'general') {
+      if (!form.periodFrom || !form.periodTo) return alert('Davr sanasini tanlang (dan — gacha)!')
+      if (form.periodFrom > form.periodTo) return alert("Boshlanish sanasi oxiridan oldin bo'lishi kerak!")
+    } else {
+      if (!form.category_id) return alert('Kategoriya tanlang!')
+      if (!form.date || !form.time) return alert('Sana va soatni kiriting!')
+      const createdAt = tashkentToIso(form.date, form.time)
+      if (!createdAt) return alert("Sana yoki soat noto'g'ri!")
+    }
+
+    setSavePass('')
+    setShowPassModal(true)
+  }
+
+  const confirmSaveExpense = async () => {
+    if (!savePass) return alert('Parolni kiriting!')
+    const ok = await checkViewPassword(savePass)
+    if (!ok) return alert("Parol noto'g'ri!")
+
+    const amountNum = parseMoneyInput(form.amount)
     setSaving(true)
-    const { error } = await supabase.from('expenses').insert([{
-      category_id: form.category_id,
-      amount: amountNum,
-      description: form.description?.trim() || null,
-      created_by: session.user.id,
-    }])
-    setSaving(false)
+    setShowPassModal(false)
 
-    if (error) return alert('Xato: ' + error.message)
-
-    const categoryName = categories.find((c) => c.id === form.category_id)?.name || ''
     const { data: profile } = await supabase
       .from('profiles')
       .select('full_name')
       .eq('id', session.user.id)
       .single()
 
+    if (expType === 'general') {
+      const createdAt = tashkentDateEndIso(form.periodTo)
+      const periodLabel = fmtPeriod(form.periodFrom, form.periodTo)
+      const descParts = [
+        form.description?.trim() || '',
+        periodLabel ? `Davr: ${periodLabel}` : '',
+      ].filter(Boolean)
+
+      const { error } = await supabase.from('expenses').insert([{
+        category_id: null,
+        amount: amountNum,
+        description: descParts.join(' · ') || null,
+        created_by: session.user.id,
+        created_at: createdAt,
+        period_from: form.periodFrom,
+        period_to: form.periodTo,
+      }])
+      setSaving(false)
+      setSavePass('')
+      if (error) return alert('Xato: ' + error.message)
+
+      notifyTelegram('general_expense', {
+        amount: amountNum,
+        period: periodLabel,
+        description: form.description?.trim() || '',
+        created_by_name: profile?.full_name || '',
+      })
+
+      setShowModal(false)
+      loadAll()
+      return
+    }
+
+    const createdAt = tashkentToIso(form.date, form.time)
+    const { error } = await supabase.from('expenses').insert([{
+      category_id: form.category_id,
+      amount: amountNum,
+      description: form.description?.trim() || null,
+      created_by: session.user.id,
+      created_at: createdAt,
+    }])
+    setSaving(false)
+    setSavePass('')
+
+    if (error) return alert('Xato: ' + error.message)
+
+    const categoryName = categories.find((c) => c.id === form.category_id)?.name || ''
     notifyTelegram('expense', {
       category_name: categoryName,
       amount: amountNum,
       description: form.description?.trim() || '',
       created_by_name: profile?.full_name || '',
+      spent_at: fmtDate(createdAt),
     })
 
     setShowModal(false)
@@ -268,6 +402,7 @@ export default function Expenses({ session, canWrite }) {
           style={{ padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff', minWidth: 160 }}
         >
           <option value="">Barcha kategoriyalar</option>
+          <option value="__general__">Umumiy rasxot</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
@@ -346,8 +481,16 @@ export default function Expenses({ session, canWrite }) {
                   onMouseOver={(ev) => (ev.currentTarget.style.background = '#FAFBFF')}
                   onMouseOut={(ev) => (ev.currentTarget.style.background = '')}
                 >
-                  <td style={{ padding: '12px 16px', fontSize: 12, color: '#9CA3AF', whiteSpace: 'nowrap' }}>{fmtDate(e.created_at)}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600 }}>{e.expense_categories?.name || '—'}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 12, color: '#9CA3AF', whiteSpace: 'nowrap' }}>
+                    {e.period_from || e.period_to
+                      ? (fmtPeriod(e.period_from, e.period_to) || fmtDate(e.created_at))
+                      : fmtDate(e.created_at)}
+                  </td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600 }}>
+                    {e.category_id
+                      ? (e.expense_categories?.name || '—')
+                      : "Umumiy rasxot"}
+                  </td>
                   <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#DC2626' }}>{fmt(e.amount)}</td>
                   <td style={{ padding: '12px 16px', fontSize: 13, color: '#6B7280', maxWidth: 220 }}>
                     {e.description || '—'}
@@ -385,46 +528,133 @@ export default function Expenses({ session, canWrite }) {
             background: '#fff', borderRadius: 16, padding: 28, width: '100%', maxWidth: 440,
             boxShadow: '0 20px 60px rgba(0,0,0,.15)', maxHeight: '90vh', overflowY: 'auto',
           }}>
-            <h2 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 20 }}>
+            <h2 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 16 }}>
               Rasxot qo'shish
             </h2>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
-              <div>
-                <label style={labelStyle}>Kategoriya *</label>
-                <select
-                  value={form.category_id}
-                  onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-                  style={{ ...inputStyle, background: '#fff' }}
-                >
-                  <option value="">Tanlang...</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => { setShowModal(false); openCatModal() }}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+              {[
+                { val: 'normal', label: 'Oddiy rasxot' },
+                { val: 'general', label: 'Umumiy rasxot' },
+              ].map((t) => (
+                <div
+                  key={t.val}
+                  onClick={() => setExpType(t.val)}
                   style={{
-                    marginTop: 8, background: 'none', border: 'none', color: '#DC2626',
-                    fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0,
+                    flex: 1, padding: '9px', border: `1.5px solid ${expType === t.val ? '#DC2626' : '#E5E7EB'}`,
+                    borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'center',
+                    background: expType === t.val ? '#FEF2F2' : '#fff',
+                    color: expType === t.val ? '#DC2626' : '#6B7280',
                   }}
                 >
-                  + Yangi kategoriya qo'shish
-                </button>
-              </div>
+                  {t.label}
+                </div>
+              ))}
+            </div>
 
-              <div>
-                <label style={labelStyle}>Summa (so'm) *</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: formatMoneyInput(e.target.value) })}
-                  placeholder="3.000.000"
-                  style={inputStyle}
-                />
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
+              {expType === 'normal' ? (
+                <>
+                  <div>
+                    <label style={labelStyle}>Kategoriya *</label>
+                    <select
+                      value={form.category_id}
+                      onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+                      style={{ ...inputStyle, background: '#fff' }}
+                    >
+                      <option value="">Tanlang...</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => { setShowModal(false); openCatModal() }}
+                      style={{
+                        marginTop: 8, background: 'none', border: 'none', color: '#DC2626',
+                        fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0,
+                      }}
+                    >
+                      + Yangi kategoriya qo'shish
+                    </button>
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>Summa (so'm) *</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={form.amount}
+                      onChange={(e) => setForm({ ...form, amount: formatMoneyInput(e.target.value) })}
+                      placeholder="3.000.000"
+                      style={inputStyle}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={labelStyle}>Sana *</label>
+                      <input
+                        type="date"
+                        value={form.date}
+                        onChange={(e) => setForm({ ...form, date: e.target.value })}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Soat *</label>
+                      <input
+                        type="time"
+                        value={form.time}
+                        onChange={(e) => setForm({ ...form, time: e.target.value })}
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={labelStyle}>Sana (dan) *</label>
+                      <input
+                        type="date"
+                        value={form.periodFrom}
+                        onChange={(e) => setForm({ ...form, periodFrom: e.target.value })}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Sana (gacha) *</label>
+                      <input
+                        type="date"
+                        value={form.periodTo}
+                        onChange={(e) => setForm({ ...form, periodTo: e.target.value })}
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>Summa (so'm) *</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={form.amount}
+                      onChange={(e) => setForm({ ...form, amount: formatMoneyInput(e.target.value) })}
+                      placeholder="3.000.000"
+                      style={inputStyle}
+                    />
+                  </div>
+
+                  <div style={{
+                    background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8,
+                    padding: '10px 14px', fontSize: 12, color: '#991B1B',
+                  }}>
+                    Bu rasxot kategoriyaga bog'lanmaydi — faqat kassa balansidan ayiriladi.
+                  </div>
+                </>
+              )}
 
               <div>
                 <label style={labelStyle}>Izoh</label>
@@ -447,11 +677,58 @@ export default function Expenses({ session, canWrite }) {
               </button>
               <button
                 type="button"
-                onClick={saveExpense}
+                onClick={requestSaveExpense}
                 disabled={saving}
                 style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 {saving ? 'Saqlanmoqda...' : 'Saqlash'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Parol — yashirin */}
+      {showPassModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{
+            background: '#fff', borderRadius: 16, padding: 28, width: '100%', maxWidth: 400,
+            boxShadow: '0 20px 60px rgba(0,0,0,.15)',
+          }}>
+            <h2 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 8 }}>
+              Parolni tasdiqlang
+            </h2>
+            <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 20 }}>
+              Rasxotni saqlash uchun parolni kiriting.
+            </p>
+            <div style={{ marginBottom: 20 }}>
+              <label style={labelStyle}>Parol</label>
+              <input
+                type="password"
+                value={savePass}
+                onChange={(e) => setSavePass(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !saving && confirmSaveExpense()}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                autoFocus
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => { setShowPassModal(false); setSavePass('') }}
+                style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #E5E7EB', background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Bekor
+              </button>
+              <button
+                type="button"
+                onClick={confirmSaveExpense}
+                disabled={saving}
+                style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                {saving ? 'Saqlanmoqda...' : 'Tasdiqlash'}
               </button>
             </div>
           </div>
